@@ -30,6 +30,7 @@ const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
 const WINDOW_ZOOM_STEP = 0.1;
+const PAGE_HISTORY_LIMIT = 50;
 const WORKSPACE_CACHE_CLEARED_EVENT = 'workspace:cache-cleared';
 
 function createHeader() {
@@ -431,9 +432,45 @@ function createWindowCanvas() {
     let currentPage = Number.isFinite(options.page)
       ? Math.max(1, Math.floor(options.page))
       : 1;
+    const sanitizeHistoryValue = (value) => {
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+
+      return Math.max(1, Math.floor(value));
+    };
+
+    const initialHistory = Array.isArray(options.pageHistory)
+      ? options.pageHistory
+          .map(sanitizeHistoryValue)
+          .filter((value) => Number.isFinite(value))
+      : [];
+
+    let pageHistory = initialHistory.length > 0 ? initialHistory.slice() : [currentPage];
+    let pageHistoryIndex = Number.isFinite(options.pageHistoryIndex)
+      ? Math.floor(options.pageHistoryIndex)
+      : pageHistory.length - 1;
+
+    if (pageHistory.length > PAGE_HISTORY_LIMIT) {
+      const overflow = pageHistory.length - PAGE_HISTORY_LIMIT;
+      pageHistory = pageHistory.slice(overflow);
+      pageHistoryIndex -= overflow;
+    }
+
+    if (pageHistoryIndex < 0) {
+      pageHistoryIndex = 0;
+    }
+
+    if (pageHistoryIndex >= pageHistory.length) {
+      pageHistoryIndex = pageHistory.length - 1;
+    }
+
+    currentPage = pageHistory[pageHistoryIndex] ?? currentPage;
     let pageInput;
     let prevButton;
     let nextButton;
+    let historyBackButton;
+    let historyForwardButton;
     let zoomOutButton;
     let zoomInButton;
     let zoomResetButton;
@@ -537,6 +574,8 @@ function createWindowCanvas() {
         lastFocusedAt,
         title: windowTitle,
         notes: notesContent,
+        pageHistory: pageHistory.slice(),
+        pageHistoryIndex,
       };
 
       if (includeFile) {
@@ -620,6 +659,94 @@ function createWindowCanvas() {
       return normalized;
     };
 
+    const trimHistoryToLimit = () => {
+      if (pageHistory.length <= PAGE_HISTORY_LIMIT) {
+        return;
+      }
+
+      const overflow = pageHistory.length - PAGE_HISTORY_LIMIT;
+      pageHistory.splice(0, overflow);
+      pageHistoryIndex = Math.max(0, pageHistoryIndex - overflow);
+    };
+
+    const clampHistoryToBounds = () => {
+      if (!Number.isFinite(totalPages)) {
+        return;
+      }
+
+      let adjusted = false;
+
+      for (let index = 0; index < pageHistory.length; index += 1) {
+        const entry = pageHistory[index];
+
+        if (!Number.isFinite(entry)) {
+          continue;
+        }
+
+        const clamped = Math.min(Math.max(1, Math.floor(entry)), totalPages);
+
+        if (clamped !== entry) {
+          pageHistory[index] = clamped;
+          adjusted = true;
+        }
+      }
+
+      if (pageHistoryIndex >= pageHistory.length) {
+        pageHistoryIndex = Math.max(0, pageHistory.length - 1);
+        adjusted = true;
+      }
+
+      if (pageHistoryIndex < 0) {
+        pageHistoryIndex = 0;
+        adjusted = true;
+      }
+
+      if (adjusted) {
+        currentPage = pageHistory[pageHistoryIndex] ?? clampPage(currentPage);
+      }
+    };
+
+    const canStepHistoryBack = () => pageHistoryIndex > 0;
+    const canStepHistoryForward = () => pageHistoryIndex < pageHistory.length - 1;
+
+    const recordHistoryEntry = (page) => {
+      const next = clampPage(page);
+
+      if (pageHistoryIndex < pageHistory.length - 1) {
+        pageHistory.splice(pageHistoryIndex + 1);
+      }
+
+      if (pageHistory[pageHistoryIndex] === next) {
+        return;
+      }
+
+      pageHistory.push(next);
+      pageHistoryIndex = pageHistory.length - 1;
+      trimHistoryToLimit();
+    };
+
+    const navigateHistory = (offset) => {
+      if (!Number.isFinite(offset) || offset === 0) {
+        return;
+      }
+
+      const targetIndex = pageHistoryIndex + Math.trunc(offset);
+
+      if (targetIndex < 0 || targetIndex >= pageHistory.length) {
+        syncNavigationState();
+        return;
+      }
+
+      pageHistoryIndex = targetIndex;
+      const targetPage = pageHistory[pageHistoryIndex];
+
+      if (Number.isFinite(targetPage)) {
+        commitPageChange(targetPage, { fromHistory: true });
+      } else {
+        syncNavigationState();
+      }
+    };
+
     const syncNavigationState = () => {
       if (pageInput) {
         pageInput.value = String(currentPage);
@@ -642,6 +769,17 @@ function createWindowCanvas() {
           nextButton.disabled = false;
         }
       }
+
+      if (historyBackButton) {
+        historyBackButton.disabled = !canStepHistoryBack();
+      }
+
+      if (historyForwardButton) {
+        historyForwardButton.disabled = !canStepHistoryForward();
+      }
+
+      windowElement.dataset.pageHistoryIndex = String(pageHistoryIndex);
+      windowElement.dataset.pageHistoryLength = String(pageHistory.length);
     };
 
     const isDefaultZoom = () => Math.abs(currentZoom - DEFAULT_WINDOW_ZOOM) < 0.001;
@@ -664,6 +802,7 @@ function createWindowCanvas() {
 
     currentZoom = clampZoom(currentZoom);
     currentPage = clampPage(currentPage);
+    clampHistoryToBounds();
 
     const syncZoomState = () => {
       if (zoomDisplay) {
@@ -723,8 +862,12 @@ function createWindowCanvas() {
       }
     };
 
-    const commitPageChange = (page) => {
+    const commitPageChange = (page, { fromHistory = false } = {}) => {
       const nextPage = clampPage(page);
+
+      if (!fromHistory) {
+        recordHistoryEntry(nextPage);
+      }
 
       if (nextPage === currentPage) {
         syncNavigationState();
@@ -742,6 +885,8 @@ function createWindowCanvas() {
           file,
           page: currentPage,
           totalPages,
+          historyIndex: pageHistoryIndex,
+          historyLength: pageHistory.length,
         },
       });
       windowElement.dispatchEvent(pageChange);
@@ -869,6 +1014,14 @@ function createWindowCanvas() {
 
       if (pageInput) {
         pageInput.setAttribute('aria-label', `${windowTitle} の表示ページ番号`);
+      }
+
+      if (historyBackButton) {
+        historyBackButton.setAttribute('aria-label', `${windowTitle} のページ履歴を戻る`);
+      }
+
+      if (historyForwardButton) {
+        historyForwardButton.setAttribute('aria-label', `${windowTitle} のページ履歴を進む`);
       }
 
       if (prevButton) {
@@ -1014,6 +1167,8 @@ function createWindowCanvas() {
         pinned: isPinned(),
         notes: notesContent,
         title: windowTitle,
+        pageHistory: pageHistory.slice(),
+        pageHistoryIndex,
       });
 
       if (!duplicateElement) {
@@ -1148,6 +1303,14 @@ function createWindowCanvas() {
       pageInput?.select();
     });
 
+    historyBackButton = document.createElement('button');
+    historyBackButton.type = 'button';
+    historyBackButton.className = 'workspace__window-nav workspace__window-nav--history-back';
+    historyBackButton.textContent = '戻';
+    historyBackButton.addEventListener('click', () => {
+      navigateHistory(-1);
+    });
+
     prevButton = document.createElement('button');
     prevButton.type = 'button';
     prevButton.className = 'workspace__window-nav workspace__window-nav--previous';
@@ -1162,6 +1325,14 @@ function createWindowCanvas() {
     nextButton.textContent = '+';
     nextButton.addEventListener('click', () => {
       stepPage(1);
+    });
+
+    historyForwardButton = document.createElement('button');
+    historyForwardButton.type = 'button';
+    historyForwardButton.className = 'workspace__window-nav workspace__window-nav--history-forward';
+    historyForwardButton.textContent = '進';
+    historyForwardButton.addEventListener('click', () => {
+      navigateHistory(1);
     });
 
     pageForm.append(pageLabel, pageInput);
@@ -1199,7 +1370,14 @@ function createWindowCanvas() {
 
     zoomGroup.append(zoomOutButton, zoomDisplay, zoomInButton, zoomResetButton);
 
-    toolbar.append(prevButton, pageForm, nextButton, zoomGroup);
+    toolbar.append(
+      historyBackButton,
+      prevButton,
+      pageForm,
+      nextButton,
+      historyForwardButton,
+      zoomGroup,
+    );
 
     body.append(toolbar, viewer.element, notesSection);
 
@@ -1215,6 +1393,8 @@ function createWindowCanvas() {
           totalPages = documentInstance.numPages;
         }
 
+        clampHistoryToBounds();
+        currentPage = clampPage(currentPage);
         syncNavigationState();
         updateViewerState();
         schedulePersist();

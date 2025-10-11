@@ -218,6 +218,8 @@ describe('createWorkspace', () => {
     expect(windowElement?.style.width).toBe('512px');
     expect(windowElement?.style.height).toBe('420px');
     expect(windowElement?.dataset.windowTitle).toBe('永続ウィンドウ');
+    expect(windowElement?.dataset.pageHistoryIndex).toBe('0');
+    expect(windowElement?.dataset.pageHistoryLength).toBe('1');
 
     const restoredTitle = workspace.querySelector('.workspace__window-title');
     expect(restoredTitle?.textContent).toBe('永続ウィンドウ');
@@ -235,6 +237,51 @@ describe('createWorkspace', () => {
 
     const activeWindow = workspace.querySelector('.workspace__window--active');
     expect(activeWindow).toBe(windowElement);
+  });
+
+  it('restores stored page history metadata and keeps navigation controls aligned', async () => {
+    const persistedFile = new File(['history'], 'history-stored.pdf', {
+      type: 'application/pdf',
+      lastModified: 456,
+    });
+
+    storageMocks.load.mockResolvedValue([
+      {
+        id: 'history-window',
+        file: persistedFile,
+        page: 4,
+        totalPages: 9,
+        pageHistory: [1, 2, 4, 7],
+        pageHistoryIndex: 2,
+        left: 12,
+        top: 18,
+        persisted: true,
+      },
+    ]);
+
+    const workspace = createWorkspace();
+
+    await flushPromises();
+    await flushPromises();
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const backButton = workspace.querySelector('.workspace__window-nav--history-back');
+    const forwardButton = workspace.querySelector('.workspace__window-nav--history-forward');
+
+    if (!windowElement || !backButton || !forwardButton) {
+      throw new Error('restored history controls are required for the test');
+    }
+
+    expect(windowElement.dataset.pageHistoryIndex).toBe('2');
+    expect(windowElement.dataset.pageHistoryLength).toBe('4');
+    expect(backButton.disabled).toBe(false);
+    expect(forwardButton.disabled).toBe(false);
+
+    forwardButton.click();
+    await flushPromises();
+
+    expect(windowElement.dataset.pageHistoryIndex).toBe('3');
+    expect(windowElement.dataset.pageHistoryLength).toBe('4');
   });
 
   it('lists selected files in the intake queue with metadata', () => {
@@ -804,6 +851,12 @@ describe('createWorkspace', () => {
     expect(duplicateWindow?.dataset.windowTitle).toBe('魔王討伐計画');
     expect(titleLabel.textContent).toBe('魔王討伐計画');
     expect(duplicateTitle?.textContent).toBe('魔王討伐計画');
+    expect(duplicateWindow?.dataset.pageHistoryLength).toBe(
+      originalWindow.dataset.pageHistoryLength,
+    );
+    expect(duplicateWindow?.dataset.pageHistoryIndex).toBe(
+      originalWindow.dataset.pageHistoryIndex,
+    );
 
     expect(duplicateWindow?.classList.contains('workspace__window--pinned')).toBe(true);
 
@@ -842,6 +895,12 @@ describe('createWorkspace', () => {
     const notesInput = workspace.querySelector('.workspace__window-notes-input');
     const pageForm = workspace.querySelector('.workspace__window-page');
     const pageInput = workspace.querySelector('.workspace__window-page-input');
+    const historyBackButton = workspace.querySelector('.workspace__window-nav--history-back');
+    const historyForwardButton = workspace.querySelector(
+      '.workspace__window-nav--history-forward',
+    );
+    const prevButton = workspace.querySelector('.workspace__window-nav--previous');
+    const nextButton = workspace.querySelector('.workspace__window-nav--next');
     const zoomOutButton = workspace.querySelector('.workspace__window-zoom-control--out');
     const zoomInButton = workspace.querySelector('.workspace__window-zoom-control--in');
     const zoomResetButton = workspace.querySelector('.workspace__window-zoom-reset');
@@ -856,6 +915,10 @@ describe('createWorkspace', () => {
       !notesInput ||
       !pageForm ||
       !pageInput ||
+      !historyBackButton ||
+      !historyForwardButton ||
+      !prevButton ||
+      !nextButton ||
       !zoomOutButton ||
       !zoomInButton ||
       !zoomResetButton
@@ -889,6 +952,12 @@ describe('createWorkspace', () => {
     expect(notesInput.getAttribute('aria-label')).toBe('遭遇表 のメモ');
     expect(pageForm.getAttribute('aria-label')).toBe('遭遇表 の表示ページを設定');
     expect(pageInput.getAttribute('aria-label')).toBe('遭遇表 の表示ページ番号');
+    expect(historyBackButton.getAttribute('aria-label')).toBe('遭遇表 のページ履歴を戻る');
+    expect(historyForwardButton.getAttribute('aria-label')).toBe(
+      '遭遇表 のページ履歴を進む',
+    );
+    expect(prevButton.getAttribute('aria-label')).toBe('遭遇表 の前のページへ移動');
+    expect(nextButton.getAttribute('aria-label')).toBe('遭遇表 の次のページへ移動');
     expect(zoomOutButton.getAttribute('aria-label')).toBe('遭遇表 を縮小表示');
     expect(zoomInButton.getAttribute('aria-label')).toBe('遭遇表 を拡大表示');
     expect(zoomResetButton.getAttribute('aria-label')).toBe('遭遇表 の表示倍率をリセット');
@@ -970,12 +1039,25 @@ describe('createWorkspace', () => {
 
     await openWindow(workspace, file, { totalPages: 8 });
 
+    const windowElement = workspace.querySelector('.workspace__window');
     const pageInput = workspace.querySelector('.workspace__window-page-input');
     const pageForm = workspace.querySelector('.workspace__window-page');
     const prevButton = workspace.querySelector('.workspace__window-nav--previous');
     const nextButton = workspace.querySelector('.workspace__window-nav--next');
+    const historyBackButton = workspace.querySelector('.workspace__window-nav--history-back');
+    const historyForwardButton = workspace.querySelector(
+      '.workspace__window-nav--history-forward',
+    );
 
-    if (!pageInput || !pageForm || !prevButton || !nextButton) {
+    if (
+      !windowElement ||
+      !pageInput ||
+      !pageForm ||
+      !prevButton ||
+      !nextButton ||
+      !historyBackButton ||
+      !historyForwardButton
+    ) {
       throw new Error('page navigation structure is required for the test');
     }
 
@@ -984,26 +1066,142 @@ describe('createWorkspace', () => {
 
     expect(prevButton.disabled).toBe(true);
     expect(nextButton.disabled).toBe(false);
+    expect(historyBackButton.disabled).toBe(true);
+    expect(historyForwardButton.disabled).toBe(true);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('0');
+    expect(windowElement.dataset.pageHistoryLength).toBe('1');
+
+    storageMocks.persist.mockClear();
 
     nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.page).toBe(2);
     expect(handler.mock.calls[0][0].detail.totalPages).toBe(8);
+    expect(handler.mock.calls[0][0].detail.historyIndex).toBe(1);
+    expect(handler.mock.calls[0][0].detail.historyLength).toBe(2);
     expect(pageInput.value).toBe('2');
     expect(prevButton.disabled).toBe(false);
+    expect(historyBackButton.disabled).toBe(false);
+    expect(historyForwardButton.disabled).toBe(true);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('1');
+    expect(windowElement.dataset.pageHistoryLength).toBe('2');
 
     pageInput.value = '5';
     pageForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     expect(handler).toHaveBeenCalledTimes(2);
     expect(handler.mock.calls[1][0].detail.page).toBe(5);
     expect(handler.mock.calls[1][0].detail.totalPages).toBe(8);
+    expect(handler.mock.calls[1][0].detail.historyIndex).toBe(2);
+    expect(handler.mock.calls[1][0].detail.historyLength).toBe(3);
     expect(pageInput.value).toBe('5');
+    expect(windowElement.dataset.pageHistoryIndex).toBe('2');
+    expect(windowElement.dataset.pageHistoryLength).toBe('3');
+    expect(historyForwardButton.disabled).toBe(true);
 
     prevButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(handler).toHaveBeenCalledTimes(3);
     expect(handler.mock.calls[2][0].detail.page).toBe(4);
     expect(handler.mock.calls[2][0].detail.totalPages).toBe(8);
+    expect(handler.mock.calls[2][0].detail.historyIndex).toBe(3);
+    expect(handler.mock.calls[2][0].detail.historyLength).toBe(4);
     expect(pageInput.value).toBe('4');
+    expect(windowElement.dataset.pageHistoryIndex).toBe('3');
+    expect(windowElement.dataset.pageHistoryLength).toBe('4');
+    expect(historyBackButton.disabled).toBe(false);
+    expect(historyForwardButton.disabled).toBe(true);
+
+    await flushPromises();
+
+    const lastPersist =
+      storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
+
+    if (!lastPersist) {
+      throw new Error('page navigation persistence call is required');
+    }
+
+    const [state] = lastPersist;
+    expect(state.pageHistory).toEqual([1, 2, 5, 4]);
+    expect(state.pageHistoryIndex).toBe(3);
+  });
+
+  it('navigates page history backward, forward, and trims stale entries', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['history'], 'history.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file, { totalPages: 12 });
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const pageInput = workspace.querySelector('.workspace__window-page-input');
+    const pageForm = workspace.querySelector('.workspace__window-page');
+    const nextButton = workspace.querySelector('.workspace__window-nav--next');
+    const backButton = workspace.querySelector('.workspace__window-nav--history-back');
+    const forwardButton = workspace.querySelector('.workspace__window-nav--history-forward');
+
+    if (
+      !windowElement ||
+      !pageInput ||
+      !pageForm ||
+      !nextButton ||
+      !backButton ||
+      !forwardButton
+    ) {
+      throw new Error('history navigation controls are required for the test');
+    }
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-page-change', handler);
+
+    storageMocks.persist.mockClear();
+
+    nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    pageInput.value = '7';
+    pageForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    pageInput.value = '3';
+    pageForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+    expect(windowElement.dataset.pageHistoryIndex).toBe('3');
+    expect(windowElement.dataset.pageHistoryLength).toBe('4');
+    expect(backButton.disabled).toBe(false);
+    expect(forwardButton.disabled).toBe(true);
+
+    backButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(handler).toHaveBeenCalledTimes(4);
+    expect(handler.mock.calls[3][0].detail.page).toBe(7);
+    expect(handler.mock.calls[3][0].detail.historyIndex).toBe(2);
+    expect(handler.mock.calls[3][0].detail.historyLength).toBe(4);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('2');
+    expect(forwardButton.disabled).toBe(false);
+
+    backButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(handler).toHaveBeenCalledTimes(5);
+    expect(handler.mock.calls[4][0].detail.page).toBe(2);
+    expect(handler.mock.calls[4][0].detail.historyIndex).toBe(1);
+    expect(handler.mock.calls[4][0].detail.historyLength).toBe(4);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('1');
+
+    pageInput.value = '9';
+    pageForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+    expect(handler).toHaveBeenCalledTimes(6);
+    expect(handler.mock.calls[5][0].detail.page).toBe(9);
+    expect(handler.mock.calls[5][0].detail.historyIndex).toBe(2);
+    expect(handler.mock.calls[5][0].detail.historyLength).toBe(3);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('2');
+    expect(windowElement.dataset.pageHistoryLength).toBe('3');
+    expect(forwardButton.disabled).toBe(true);
+
+    await flushPromises();
+
+    const lastPersist =
+      storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
+
+    if (!lastPersist) {
+      throw new Error('history persistence call is required');
+    }
+
+    const [state] = lastPersist;
+    expect(state.pageHistory).toEqual([1, 2, 9]);
+    expect(state.pageHistoryIndex).toBe(2);
   });
 
   it('supports keyboard page navigation when the window is focused', async () => {
@@ -1029,6 +1227,10 @@ describe('createWorkspace', () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.page).toBe(2);
     expect(handler.mock.calls[0][0].detail.totalPages).toBe(3);
+    expect(handler.mock.calls[0][0].detail.historyIndex).toBe(1);
+    expect(handler.mock.calls[0][0].detail.historyLength).toBe(2);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('1');
+    expect(windowElement.dataset.pageHistoryLength).toBe('2');
 
     windowElement.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
@@ -1037,6 +1239,10 @@ describe('createWorkspace', () => {
     expect(handler).toHaveBeenCalledTimes(2);
     expect(handler.mock.calls[1][0].detail.page).toBe(1);
     expect(handler.mock.calls[1][0].detail.totalPages).toBe(3);
+    expect(handler.mock.calls[1][0].detail.historyIndex).toBe(2);
+    expect(handler.mock.calls[1][0].detail.historyLength).toBe(3);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('2');
+    expect(windowElement.dataset.pageHistoryLength).toBe('3');
 
     pageInput.focus();
     pageInput.dispatchEvent(
@@ -1115,9 +1321,10 @@ describe('createWorkspace', () => {
 
     await openWindow(workspace, file, { totalPages: 4 });
 
+    const windowElement = workspace.querySelector('.workspace__window');
     const pageInput = workspace.querySelector('.workspace__window-page-input');
 
-    if (!pageInput) {
+    if (!windowElement || !pageInput) {
       throw new Error('page input is required for the test');
     }
 
@@ -1129,12 +1336,15 @@ describe('createWorkspace', () => {
 
     expect(handler).not.toHaveBeenCalled();
     expect(pageInput.value).toBe('1');
+    expect(windowElement.dataset.pageHistoryIndex).toBe('0');
+    expect(windowElement.dataset.pageHistoryLength).toBe('1');
 
     pageInput.value = '   ';
     pageInput.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(handler).not.toHaveBeenCalled();
     expect(pageInput.value).toBe('1');
+    expect(windowElement.dataset.pageHistoryIndex).toBe('0');
   });
 
   it('adjusts zoom levels via the toolbar controls and announces the change', async () => {

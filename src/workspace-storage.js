@@ -1,6 +1,7 @@
 const DATABASE_NAME = 'gmworkbench';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'workspace-windows';
+const MAX_STORED_HISTORY = 50;
 
 const memoryStore = new Map();
 let databasePromise = null;
@@ -125,6 +126,42 @@ function normalizeForStorage(state) {
     normalized.notes = state.notes;
   }
 
+  let history = [];
+  let trimmedOffset = 0;
+
+  if (Array.isArray(state.pageHistory) && state.pageHistory.length > 0) {
+    const sanitized = state.pageHistory
+      .map((value) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : null))
+      .filter((value) => Number.isFinite(value));
+
+    if (sanitized.length > 0) {
+      if (sanitized.length > MAX_STORED_HISTORY) {
+        trimmedOffset = sanitized.length - MAX_STORED_HISTORY;
+        history = sanitized.slice(-MAX_STORED_HISTORY);
+      } else {
+        history = sanitized;
+      }
+    }
+  }
+
+  let historyIndex;
+
+  if (Number.isFinite(state.pageHistoryIndex)) {
+    historyIndex = Math.max(0, Math.floor(state.pageHistoryIndex));
+
+    if (trimmedOffset > 0) {
+      historyIndex = Math.max(0, historyIndex - trimmedOffset);
+    }
+  }
+
+  if (history.length > 0) {
+    normalized.pageHistory = history;
+
+    if (Number.isFinite(historyIndex)) {
+      normalized.pageHistoryIndex = Math.min(history.length - 1, historyIndex);
+    }
+  }
+
   if (state.data instanceof Blob) {
     normalized.data = state.data;
   }
@@ -193,6 +230,23 @@ function normalizeFromStorage(record) {
     return null;
   }
 
+  const history =
+    Array.isArray(record.pageHistory) && record.pageHistory.length > 0
+      ? record.pageHistory
+          .map((value) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : null))
+          .filter((value) => Number.isFinite(value))
+      : [];
+
+  let historyIndex = Number.isFinite(record.pageHistoryIndex)
+    ? Math.max(0, Math.floor(record.pageHistoryIndex))
+    : undefined;
+
+  if (history.length === 0) {
+    historyIndex = undefined;
+  } else if (Number.isFinite(historyIndex) && historyIndex >= history.length) {
+    historyIndex = history.length - 1;
+  }
+
   return {
     id: record.id,
     file,
@@ -213,6 +267,8 @@ function normalizeFromStorage(record) {
       : undefined,
     title: typeof record.title === 'string' ? record.title : undefined,
     notes: typeof record.notes === 'string' ? record.notes : '',
+    pageHistory: history.length > 0 ? history : undefined,
+    pageHistoryIndex: Number.isFinite(historyIndex) ? historyIndex : undefined,
     persisted: true,
   };
 }
