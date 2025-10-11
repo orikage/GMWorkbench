@@ -694,6 +694,7 @@ body {
 
 .workspace__window-zoom-control,
 .workspace__window-zoom-reset,
+.workspace__window-zoom-fit,
 .workspace__window-rotation-control,
 .workspace__window-rotation-reset {
   border-radius: 10px;
@@ -711,6 +712,8 @@ body {
 .workspace__window-zoom-control:hover,
 .workspace__window-zoom-reset:focus,
 .workspace__window-zoom-reset:hover,
+.workspace__window-zoom-fit:focus,
+.workspace__window-zoom-fit:hover,
 .workspace__window-rotation-control:focus,
 .workspace__window-rotation-control:hover,
 .workspace__window-rotation-reset:focus,
@@ -723,6 +726,7 @@ body {
 
 .workspace__window-zoom-control:disabled,
 .workspace__window-zoom-reset:disabled,
+.workspace__window-zoom-fit:disabled,
 .workspace__window-rotation-control:disabled,
 .workspace__window-rotation-reset:disabled {
   cursor: not-allowed;
@@ -730,6 +734,12 @@ body {
   background: rgba(244, 245, 247, 0.04);
   border-color: rgba(244, 245, 247, 0.12);
   transform: none;
+}
+
+.workspace__window-zoom-fit[aria-pressed='true'] {
+  background: rgba(244, 245, 247, 0.24);
+  border-color: rgba(244, 245, 247, 0.55);
+  color: rgba(18, 20, 23, 0.9);
 }
 
 .workspace__window-notes {

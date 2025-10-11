@@ -21,3 +21,5 @@
 - [2025-10-11 — ページ端ジャンプコントロールの追加](changelog/2025-10-11-window-page-boundaries.md)
 - [2025-10-11 — ウィンドウ回転コントロールの追加](changelog/2025-10-11-window-rotation.md)
 - [2025-10-11 — ウィンドウ最大化トグルの追加](changelog/2025-10-11-window-maximize.md)
+- [2025-10-11 — ズームフィット操作の追加](changelog/2025-10-11-window-zoom-fit.md)
+- [2025-10-11 — ウィンドウフォーカス循環ショートカットの追加](changelog/2025-10-11-window-focus-cycle.md)

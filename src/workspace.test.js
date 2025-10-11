@@ -76,6 +76,9 @@ const openWindow = async (workspace, file, options = {}) => {
     await flushPromises();
     attempts += 1;
   }
+
+  await flushPromises();
+  await flushPromises();
 };
 
 beforeEach(() => {
@@ -499,14 +502,20 @@ describe('createWorkspace', () => {
     await openWindow(workspace, file, { totalPages: 6 });
 
     const viewer = workspace.querySelector('.workspace__window-viewer');
+    const windowElement = workspace.querySelector('.workspace__window');
 
-    if (!(viewer instanceof HTMLElement)) {
+    if (!(viewer instanceof HTMLElement) || !(windowElement instanceof HTMLElement)) {
       throw new Error('window viewer element is required for the test');
     }
 
     expect(viewer.dataset.page).toBe('1');
     expect(viewer.dataset.zoom).toBe('1');
     expect(viewer.dataset.totalPages).toBe('6');
+    expect(viewer.dataset.pageWidth).toBe('600');
+    expect(viewer.dataset.pageHeight).toBe('800');
+    expect(viewer.dataset.viewportWidth).toBe('600');
+    expect(viewer.dataset.viewportHeight).toBe('800');
+    expect(windowElement.dataset.zoomFitMode).toBe('manual');
 
     const pageInput = workspace.querySelector('.workspace__window-page-input');
 
@@ -534,6 +543,9 @@ describe('createWorkspace', () => {
     await flushPromises();
 
     expect(viewer.dataset.zoom).toBe('1.1');
+    expect(viewer.dataset.viewportWidth).toBe('660');
+    expect(viewer.dataset.viewportHeight).toBe('880');
+    expect(windowElement.dataset.zoomFitMode).toBe('manual');
   });
 
   it('stacks new windows with offsets and updates the active state', async () => {
@@ -1657,6 +1669,7 @@ describe('createWorkspace', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.zoom).toBeCloseTo(1.1, 2);
+    expect(handler.mock.calls[0][0].detail.mode).toBe('manual');
     expect(zoomDisplay.textContent).toBe('110%');
 
     windowElement.dispatchEvent(
@@ -1665,6 +1678,7 @@ describe('createWorkspace', () => {
 
     expect(handler).toHaveBeenCalledTimes(2);
     expect(handler.mock.calls[1][0].detail.zoom).toBeCloseTo(1.0, 2);
+    expect(handler.mock.calls[1][0].detail.mode).toBe('manual');
     expect(zoomDisplay.textContent).toBe('100%');
 
     windowElement.dispatchEvent(
@@ -1673,6 +1687,7 @@ describe('createWorkspace', () => {
 
     expect(handler).toHaveBeenCalledTimes(3);
     expect(handler.mock.calls[2][0].detail.zoom).toBeCloseTo(1.1, 2);
+    expect(handler.mock.calls[2][0].detail.mode).toBe('manual');
     expect(zoomDisplay.textContent).toBe('110%');
 
     windowElement.dispatchEvent(
@@ -1755,6 +1770,7 @@ describe('createWorkspace', () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.zoom).toBeCloseTo(1.1, 2);
     expect(handler.mock.calls[0][0].detail.page).toBe(1);
+    expect(handler.mock.calls[0][0].detail.mode).toBe('manual');
     expect(zoomDisplay.textContent).toBe('110%');
     expect(zoomOut.disabled).toBe(false);
     expect(zoomReset.disabled).toBe(false);
@@ -1771,6 +1787,7 @@ describe('createWorkspace', () => {
 
     expect(lastCallAfterMax[0].detail.zoom).toBeCloseTo(2, 2);
     expect(lastCallAfterMax[0].detail.page).toBe(1);
+    expect(lastCallAfterMax[0].detail.mode).toBe('manual');
     expect(zoomDisplay.textContent).toBe('200%');
     expect(zoomIn.disabled).toBe(true);
 
@@ -1783,6 +1800,7 @@ describe('createWorkspace', () => {
 
     expect(afterDecrease[0].detail.zoom).toBeCloseTo(1.9, 2);
     expect(afterDecrease[0].detail.page).toBe(1);
+    expect(afterDecrease[0].detail.mode).toBe('manual');
     expect(zoomDisplay.textContent).toBe('190%');
     expect(zoomIn.disabled).toBe(false);
 
@@ -1814,6 +1832,301 @@ describe('createWorkspace', () => {
     expect(zoomOut.disabled).toBe(false);
     expect(zoomIn.disabled).toBe(false);
     expect(zoomReset.disabled).toBe(true);
+  });
+
+  it('fits the viewer to the available width and full page height', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'fit.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file, { totalPages: 6 });
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const viewer = workspace.querySelector('.workspace__window-viewer');
+    const fitWidthButton = workspace.querySelector('.workspace__window-zoom-fit--width');
+    const fitPageButton = workspace.querySelector('.workspace__window-zoom-fit--page');
+    const zoomDisplay = workspace.querySelector('.workspace__window-zoom-display');
+    const zoomInButton = workspace.querySelector('.workspace__window-zoom-control--in');
+    const zoomResetButton = workspace.querySelector('.workspace__window-zoom-reset');
+
+    if (
+      !windowElement ||
+      !(viewer instanceof HTMLElement) ||
+      !(fitWidthButton instanceof HTMLButtonElement) ||
+      !(fitPageButton instanceof HTMLButtonElement) ||
+      !zoomDisplay ||
+      !(zoomInButton instanceof HTMLButtonElement) ||
+      !(zoomResetButton instanceof HTMLButtonElement)
+    ) {
+      throw new Error('fit controls are required for the test');
+    }
+
+    viewer.style.padding = '16px';
+    viewer.getBoundingClientRect = () => ({
+      width: 640,
+      height: 520,
+      top: 0,
+      left: 0,
+      right: 640,
+      bottom: 520,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+    const originalGetComputedStyle = window.getComputedStyle;
+    const styleSpy = vi.spyOn(window, 'getComputedStyle');
+    styleSpy.mockImplementation((element) => {
+      if (element === viewer) {
+        return {
+          paddingLeft: '16px',
+          paddingRight: '16px',
+          paddingTop: '16px',
+          paddingBottom: '16px',
+        };
+      }
+
+      return originalGetComputedStyle.call(window, element);
+    });
+    Object.defineProperty(viewer, 'clientWidth', { value: 640, configurable: true });
+    Object.defineProperty(viewer, 'clientHeight', { value: 520, configurable: true });
+
+    fitWidthButton.disabled = false;
+    fitPageButton.disabled = false;
+
+    zoomInButton.click();
+    await flushPromises();
+    zoomResetButton.click();
+    await flushPromises();
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-zoom-change', handler);
+
+    fitWidthButton.click();
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].detail.mode).toBe('fit-width');
+    expect(handler.mock.calls[0][0].detail.zoom).toBeCloseTo(1.01, 2);
+    expect(windowElement.dataset.zoomFitMode).toBe('fit-width');
+    expect(viewer.dataset.zoom).toBe('1.01');
+    expect(viewer.dataset.viewportWidth).toBe('606');
+    expect(viewer.dataset.viewportHeight).toBe('808');
+    expect(windowElement.dataset.zoomFitWidth).toBe('1.01');
+    expect(zoomDisplay.textContent).toBe('101%');
+    expect(fitWidthButton.disabled).toBe(true);
+    expect(fitWidthButton.getAttribute('aria-pressed')).toBe('true');
+    expect(fitPageButton.disabled).toBe(false);
+    expect(fitPageButton.getAttribute('aria-pressed')).toBe('false');
+
+    fitPageButton.click();
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler.mock.calls[1][0].detail.mode).toBe('fit-page');
+    expect(handler.mock.calls[1][0].detail.zoom).toBeCloseTo(0.61, 2);
+    expect(windowElement.dataset.zoomFitMode).toBe('fit-page');
+    expect(windowElement.dataset.zoomFitPage).toBe('0.61');
+    expect(viewer.dataset.zoom).toBe('0.61');
+    expect(viewer.dataset.viewportWidth).toBe('366');
+    expect(viewer.dataset.viewportHeight).toBe('488');
+    expect(zoomDisplay.textContent).toBe('61%');
+    expect(fitPageButton.disabled).toBe(true);
+    expect(fitPageButton.getAttribute('aria-pressed')).toBe('true');
+    expect(fitWidthButton.disabled).toBe(false);
+    expect(fitWidthButton.getAttribute('aria-pressed')).toBe('false');
+    styleSpy.mockRestore();
+  });
+
+  it('clears fit mode metadata when manual zoom is used after fitting', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'fit-reset.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const viewer = workspace.querySelector('.workspace__window-viewer');
+    const fitWidthButton = workspace.querySelector('.workspace__window-zoom-fit--width');
+    const zoomInButton = workspace.querySelector('.workspace__window-zoom-control--in');
+    const zoomResetButton = workspace.querySelector('.workspace__window-zoom-reset');
+
+    if (
+      !windowElement ||
+      !(viewer instanceof HTMLElement) ||
+      !(fitWidthButton instanceof HTMLButtonElement) ||
+      !(zoomInButton instanceof HTMLButtonElement) ||
+      !(zoomResetButton instanceof HTMLButtonElement)
+    ) {
+      throw new Error('fit reset controls are required for the test');
+    }
+
+    viewer.style.padding = '16px';
+    viewer.getBoundingClientRect = () => ({
+      width: 640,
+      height: 520,
+      top: 0,
+      left: 0,
+      right: 640,
+      bottom: 520,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+    const originalGetComputedStyle = window.getComputedStyle;
+    const styleSpy = vi.spyOn(window, 'getComputedStyle');
+    styleSpy.mockImplementation((element) => {
+      if (element === viewer) {
+        return {
+          paddingLeft: '16px',
+          paddingRight: '16px',
+          paddingTop: '16px',
+          paddingBottom: '16px',
+        };
+      }
+
+      return originalGetComputedStyle.call(window, element);
+    });
+    Object.defineProperty(viewer, 'clientWidth', { value: 640, configurable: true });
+    Object.defineProperty(viewer, 'clientHeight', { value: 520, configurable: true });
+
+    fitWidthButton.disabled = false;
+
+    zoomInButton.click();
+    await flushPromises();
+    zoomResetButton.click();
+    await flushPromises();
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-zoom-change', handler);
+
+    fitWidthButton.click();
+    await flushPromises();
+
+    expect(windowElement.dataset.zoomFitMode).toBe('fit-width');
+    expect(fitWidthButton.getAttribute('aria-pressed')).toBe('true');
+
+    zoomInButton.click();
+    await flushPromises();
+
+    const lastCall = handler.mock.calls[handler.mock.calls.length - 1];
+
+    if (!lastCall) {
+      throw new Error('manual zoom event should be recorded');
+    }
+
+    expect(lastCall[0].detail.mode).toBe('manual');
+    expect(windowElement.dataset.zoomFitMode).toBe('manual');
+    expect(fitWidthButton.getAttribute('aria-pressed')).toBe('false');
+    expect(fitWidthButton.disabled).toBe(false);
+    styleSpy.mockRestore();
+  });
+
+  it('cycles focus between windows with keyboard shortcuts and emits events', async () => {
+    const baseTime = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now');
+    let tick = 0;
+    nowSpy.mockImplementation(() => baseTime + tick++ * 1000);
+
+    try {
+      const workspace = createWorkspace();
+      const fileA = new File(['dummy-a'], 'cycle-a.pdf', { type: 'application/pdf' });
+      const fileB = new File(['dummy-b'], 'cycle-b.pdf', { type: 'application/pdf' });
+      const fileC = new File(['dummy-c'], 'cycle-c.pdf', { type: 'application/pdf' });
+
+      await openWindow(workspace, fileA);
+      await openWindow(workspace, fileB);
+      await openWindow(workspace, fileC);
+
+      const windows = workspace.querySelectorAll('.workspace__window');
+
+      if (windows.length !== 3) {
+        throw new Error('three windows are required for focus cycling tests');
+      }
+
+      const [firstWindow, secondWindow, thirdWindow] = windows;
+      const handler = vi.fn();
+      workspace.addEventListener('workspace:window-focus-cycle', handler);
+
+      const previousFocusTimestamp = Number(secondWindow.dataset.lastFocusedAt || '0');
+      expect(Number.isFinite(previousFocusTimestamp)).toBe(true);
+
+      workspace.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: ']',
+          code: 'BracketRight',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      await flushPromises();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const firstCallEvent = handler.mock.calls[0][0];
+      expect(firstCallEvent.detail.direction).toBe('next');
+      expect(firstCallEvent.detail.windowId).toBe(secondWindow.dataset.windowId);
+      expect(firstCallEvent.detail.totalWindows).toBe(3);
+      const activeWindowAfterNext = workspace.querySelector('.workspace__window--active');
+      expect(activeWindowAfterNext).toBe(secondWindow);
+      expect(secondWindow.classList.contains('workspace__window--active')).toBe(true);
+      expect(thirdWindow.classList.contains('workspace__window--active')).toBe(false);
+      const updatedFocusTimestamp = Number(secondWindow.dataset.lastFocusedAt || '0');
+      expect(Number.isFinite(updatedFocusTimestamp)).toBe(true);
+      expect(updatedFocusTimestamp).toBeGreaterThan(previousFocusTimestamp);
+
+      handler.mockClear();
+
+      workspace.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: '[',
+          code: 'BracketLeft',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      await flushPromises();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const secondCallEvent = handler.mock.calls[0][0];
+      expect(secondCallEvent.detail.direction).toBe('previous');
+      expect(secondCallEvent.detail.windowId).toBe(firstWindow.dataset.windowId);
+      expect(secondCallEvent.detail.title).toContain('cycle-a.pdf');
+      const activeWindowAfterPrevious = workspace.querySelector('.workspace__window--active');
+      expect(activeWindowAfterPrevious).toBe(firstWindow);
+      expect(firstWindow.classList.contains('workspace__window--active')).toBe(true);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('ignores focus cycling shortcuts when only one window is open', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['single'], 'single.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+
+    if (!windowElement) {
+      throw new Error('a window should exist for the single-window test');
+    }
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-focus-cycle', handler);
+
+    workspace.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: ']',
+        code: 'BracketRight',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await flushPromises();
+
+    expect(handler).not.toHaveBeenCalled();
+    const activeWindow = workspace.querySelector('.workspace__window--active');
+    expect(activeWindow).toBe(windowElement);
   });
 
   it('adjusts rotation via toolbar controls and emits updates', async () => {

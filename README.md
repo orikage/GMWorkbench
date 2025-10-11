@@ -54,9 +54,10 @@ pnpm docs:print:decisions
 - `workspace:window-close` — ワークスペース上のウィンドウを閉じたとき。
 - `workspace:window-pin-toggle` — ウィンドウのピン留め状態を切り替えたとき。
 - `workspace:window-page-change` — ページ入力やナビゲーション、キーボード操作で表示ページが変わったとき。詳細には `page`、`totalPages`、`historyIndex`、`historyLength`、現在の `zoom` と `rotation` を含む。
-- `workspace:window-zoom-change` — ウィンドウの倍率を拡大・縮小・リセットしたとき。詳細には `zoom` (0.5〜2.0)、現在の `page`、`rotation` を含む。
+- `workspace:window-zoom-change` — ウィンドウの倍率を拡大・縮小・リセットしたとき。詳細には `zoom` (0.5〜2.0)、現在の `page`、`rotation` に加え `mode` (`manual` / `fit-width` / `fit-page`) を含む。
 - `workspace:window-rotation-change` — 回転ツールバーで表示角度を変更したとき。`rotation` (0°/90°/180°/270°)、`page`、`zoom` を通知する。
 - `workspace:window-maximize-change` — ヘッダーの「最大化」を切り替えたとき。`maximized`、現在の `left`/`top`/`width`/`height` と復元用の `restore*` 値を通知する。
+- `workspace:window-focus-cycle` — キーボード操作でフォーカスを循環させたとき。`direction` (`next` / `previous`)、`windowId`、`title`、`totalWindows` を含む。
 - `workspace:window-duplicate` — ウィンドウの「複製」を押したとき。`page`, `zoom`, `rotation`, `totalPages`, `sourceId`, `duplicateId`, `title`, `maximized` を併せて通知する。
 - `workspace:window-notes-change` — ウィンドウ内のメモが更新されたとき。`detail.notes` に最新テキストを含む。
 - `workspace:window-title-change` — ウィンドウタイトルが保存されたとき。`detail.title` に確定したタイトルを含む。
@@ -67,7 +68,8 @@ pnpm docs:print:decisions
 
 - `pdfjs-dist` を用いて PDF をローカルで描画し、各ウィンドウは最新ページのキャンバスを生成します。
 - ワーカーは `pdfjs-dist/build/pdf.worker.min.mjs?url` を経由してバンドルしているため、Vite 環境では追加設定なしで動作します。
-- ビューア要素には `data-page`, `data-zoom`, `data-rotation`, `data-total-pages` を付与し、テストやアクセシビリティ計測から現在の表示状態を取得できます。
+- ビューア要素には `data-page`, `data-zoom`, `data-rotation`, `data-total-pages` に加え、元ページサイズを示す `data-page-width` / `data-page-height`、描画結果の `data-viewport-width` / `data-viewport-height` を付与し、テストやアクセシビリティ計測から現在の表示状態を取得できます。
+- ウィンドウ要素側でも `data-zoom-fit-mode`, `data-zoom-fit-width`, `data-zoom-fit-page` を公開し、UI とイベントで採用されているフィットモードや算出倍率を DOM 経由で参照できます。`data-opened-at` と `data-last-focused-at` から作成時刻と最新フォーカスタイムスタンプを取得できます。
 - 既存のページ／ズーム操作は描画と同期しており、イベントと DOM 属性のどちらからでも最新の状態を参照できます。
 
 ## セッション永続化
@@ -115,6 +117,18 @@ pnpm docs:print:decisions
 - `workspace:window-maximize-change` では `maximized` のほか、現在のジオメトリ (`left`/`top`/`width`/`height`) と復元用の `restoreLeft`/`restoreTop`/`restoreWidth`/`restoreHeight` を通知します。
 - 最大化状態と復元先レイアウトは永続化対象であり、リロード後も同じ広がり方を維持します。複製したウィンドウは通常サイズで生成され、必要に応じて個別に最大化できます。
 
+## ウィンドウフォーカス循環
+
+- `]` / `[` のショートカットで、最近使った順にウィンドウを順送り・逆送りできます。
+- フォーカス移動時には `workspace:window-focus-cycle` を発火し、移動方向・ウィンドウ ID・タイトル・総ウィンドウ数を通知します。
+- 移動したウィンドウは `workspace__window--active` クラスを持ち、`data-last-focused-at` が更新されて永続化タイムスタンプと同期します。
+
+## ズームフィット
+
+- ズームパネルに「幅合わせ」「全体表示」ボタンを追加し、ワンクリックで閲覧中ページをウィンドウ幅または縦横いっぱいに収められます。
+- 操作に応じて `workspace:window-zoom-change` の `detail.mode` が `fit-width` / `fit-page` を通知し、依頼元が現在のフィット種別を把握できます。
+- 現在のフィット種別はウィンドウの `data-zoom-fit-mode` に反映され、算出倍率は `data-zoom-fit-width` / `data-zoom-fit-page` から参照できます。フィットを解除すると `mode` は自動的に `manual` へ戻ります。
+
 ## ページ履歴ナビゲーション
 
 - ツールバーに「戻」「進」ボタンを追加し、最近開いたページへワンクリックで戻れるようにしました。矢印ボタンや数値入力と組み合わせて移動しても履歴が自動更新されます。
@@ -133,3 +147,5 @@ pnpm docs:print:decisions
 | ズームイン | `=` または `+` | 修飾キー付き（Ctrl/⌘ など）の操作はブラウザに委ねます。 |
 | ズームアウト | `-` または `_` | ズーム下限 (`50%`) を下回らないよう制御されます。 |
 | ズームリセット | `0` | デフォルト倍率 (`100%`) に戻します。 |
+| 次のウィンドウ | `]` | 入力欄をフォーカスしていない場合に、最近使った順で次のウィンドウへ移動します。 |
+| 前のウィンドウ | `[` | 入力欄をフォーカスしていない場合に、最近使った順で前のウィンドウへ戻ります。 |

@@ -29,6 +29,7 @@ const WINDOW_TITLE_CHANGE_EVENT = 'workspace:window-title-change';
 const WINDOW_COLOR_CHANGE_EVENT = 'workspace:window-color-change';
 const WINDOW_ROTATION_CHANGE_EVENT = 'workspace:window-rotation-change';
 const WINDOW_MAXIMIZE_CHANGE_EVENT = 'workspace:window-maximize-change';
+const WINDOW_FOCUS_CYCLE_EVENT = 'workspace:window-focus-cycle';
 const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
@@ -410,10 +411,12 @@ function createWindowCanvas() {
   };
 
   const openWindow = (file, options = {}) => {
+    let zoomFitMode = 'manual';
     const windowElement = document.createElement('article');
     windowElement.className = 'workspace__window';
     windowElement.setAttribute('role', 'group');
     windowElement.tabIndex = 0;
+    windowElement.dataset.zoomFitMode = zoomFitMode;
 
     const offsetIndex = area.children.length;
     const defaultLeft = offsetIndex * WINDOW_STACK_OFFSET;
@@ -490,6 +493,8 @@ function createWindowCanvas() {
     let zoomInButton;
     let zoomResetButton;
     let zoomDisplay;
+    let zoomFitWidthButton;
+    let zoomFitPageButton;
     let rotateLeftButton;
     let rotateRightButton;
     let rotateResetButton;
@@ -762,6 +767,20 @@ function createWindowCanvas() {
       await persistWorkspaceWindow(descriptor, { includeFile });
     };
 
+    const syncFocusMetadata = () => {
+      if (Number.isFinite(openedAt)) {
+        windowElement.dataset.openedAt = String(openedAt);
+      } else {
+        delete windowElement.dataset.openedAt;
+      }
+
+      if (Number.isFinite(lastFocusedAt)) {
+        windowElement.dataset.lastFocusedAt = String(lastFocusedAt);
+      } else {
+        delete windowElement.dataset.lastFocusedAt;
+      }
+    };
+
     const schedulePersist = ({ includeFile = false } = {}) => {
       const shouldIncludeFile = includeFile || !hasStoredFile;
 
@@ -773,6 +792,8 @@ function createWindowCanvas() {
         })
         .catch(() => {});
     };
+
+    syncFocusMetadata();
 
     const syncNotesMetadata = () => {
       windowElement.dataset.notesLength = String(notesContent.length);
@@ -821,6 +842,8 @@ function createWindowCanvas() {
         });
       } catch (error) {
         // Rendering errors are surfaced via viewer status; suppress console noise in tests.
+      } finally {
+        syncZoomState();
       }
     };
 
@@ -1015,6 +1038,146 @@ function createWindowCanvas() {
     currentPage = clampPage(currentPage);
     clampHistoryToBounds();
 
+    const approxEqual = (a, b, tolerance = 0.01) =>
+      Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tolerance;
+
+    const getViewerMetrics = () => {
+      if (!viewer || typeof viewer.getViewportMetrics !== 'function') {
+        return null;
+      }
+
+      return viewer.getViewportMetrics();
+    };
+
+    const getViewerContentSize = () => {
+      if (!(viewer.element instanceof HTMLElement)) {
+        return null;
+      }
+
+      const element = viewer.element;
+      let width = 0;
+      let height = 0;
+
+      if (typeof element.getBoundingClientRect === 'function') {
+        const rect = element.getBoundingClientRect();
+        width = rect.width;
+        height = rect.height;
+      }
+
+      if (!Number.isFinite(width) || width <= 0) {
+        width = element.clientWidth;
+      }
+
+      if (!Number.isFinite(width) || width <= 0) {
+        width = element.scrollWidth;
+      }
+
+      if (!Number.isFinite(width) || width <= 0) {
+        width = CANVAS_FALLBACK_WIDTH;
+      }
+
+      if (!Number.isFinite(height) || height <= 0) {
+        height = element.clientHeight;
+      }
+
+      if (!Number.isFinite(height) || height <= 0) {
+        height = element.scrollHeight;
+      }
+
+      if (!Number.isFinite(height) || height <= 0) {
+        height = CANVAS_FALLBACK_HEIGHT;
+      }
+
+      let horizontalPadding = 0;
+      let verticalPadding = 0;
+
+      if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+        const style = window.getComputedStyle(element);
+        const paddingLeft = Number.parseFloat(style.paddingLeft);
+        const paddingRight = Number.parseFloat(style.paddingRight);
+        const paddingTop = Number.parseFloat(style.paddingTop);
+        const paddingBottom = Number.parseFloat(style.paddingBottom);
+
+        if (Number.isFinite(paddingLeft)) {
+          horizontalPadding += paddingLeft;
+        }
+
+        if (Number.isFinite(paddingRight)) {
+          horizontalPadding += paddingRight;
+        }
+
+        if (Number.isFinite(paddingTop)) {
+          verticalPadding += paddingTop;
+        }
+
+        if (Number.isFinite(paddingBottom)) {
+          verticalPadding += paddingBottom;
+        }
+      }
+
+      const availableWidth = width - horizontalPadding;
+      const availableHeight = height - verticalPadding;
+
+      return {
+        width:
+          Number.isFinite(availableWidth) && availableWidth > 0 ? availableWidth : Math.max(width, 0),
+        height:
+          Number.isFinite(availableHeight) && availableHeight > 0
+            ? availableHeight
+            : Math.max(height, 0),
+      };
+    };
+
+    const computeFitZoom = (mode) => {
+      const metrics = getViewerMetrics();
+      const datasetBaseWidth = Number.parseFloat(viewer.element?.dataset?.pageWidth ?? '');
+      const datasetBaseHeight = Number.parseFloat(viewer.element?.dataset?.pageHeight ?? '');
+      const baseWidth = Number.isFinite(metrics?.pageWidth)
+        ? metrics.pageWidth
+        : Number.isFinite(datasetBaseWidth)
+          ? datasetBaseWidth
+          : null;
+      const baseHeight = Number.isFinite(metrics?.pageHeight)
+        ? metrics.pageHeight
+        : Number.isFinite(datasetBaseHeight)
+          ? datasetBaseHeight
+          : null;
+
+      if (!baseWidth || !baseHeight) {
+        return null;
+      }
+
+      const contentSize = getViewerContentSize();
+
+      if (!contentSize) {
+        return null;
+      }
+
+      if (mode === 'width') {
+        const target = contentSize.width / baseWidth;
+
+        if (!Number.isFinite(target) || target <= 0) {
+          return null;
+        }
+
+        return clampZoom(target);
+      }
+
+      if (mode === 'page') {
+        const widthScale = contentSize.width / baseWidth;
+        const heightScale = contentSize.height / baseHeight;
+        const candidate = Math.min(widthScale, heightScale);
+
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+          return null;
+        }
+
+        return clampZoom(candidate);
+      }
+
+      return null;
+    };
+
     const syncZoomState = () => {
       if (zoomDisplay) {
         const percentage = Math.round(currentZoom * 100);
@@ -1031,6 +1194,49 @@ function createWindowCanvas() {
 
       if (zoomResetButton) {
         zoomResetButton.disabled = isDefaultZoom();
+      }
+
+      const fitWidthZoom = computeFitZoom('width');
+      const fitPageZoom = computeFitZoom('page');
+
+      if (Number.isFinite(fitWidthZoom)) {
+        windowElement.dataset.zoomFitWidth = String(fitWidthZoom);
+      } else {
+        delete windowElement.dataset.zoomFitWidth;
+      }
+
+      if (Number.isFinite(fitPageZoom)) {
+        windowElement.dataset.zoomFitPage = String(fitPageZoom);
+      } else {
+        delete windowElement.dataset.zoomFitPage;
+      }
+
+      if (zoomFitWidthButton) {
+        if (!Number.isFinite(fitWidthZoom)) {
+          zoomFitWidthButton.disabled = true;
+          zoomFitWidthButton.setAttribute('aria-pressed', 'false');
+        } else {
+          const matches = approxEqual(currentZoom, fitWidthZoom);
+          zoomFitWidthButton.disabled = matches;
+          zoomFitWidthButton.setAttribute(
+            'aria-pressed',
+            zoomFitMode === 'fit-width' && matches ? 'true' : 'false',
+          );
+        }
+      }
+
+      if (zoomFitPageButton) {
+        if (!Number.isFinite(fitPageZoom)) {
+          zoomFitPageButton.disabled = true;
+          zoomFitPageButton.setAttribute('aria-pressed', 'false');
+        } else {
+          const matches = approxEqual(currentZoom, fitPageZoom);
+          zoomFitPageButton.disabled = matches;
+          zoomFitPageButton.setAttribute(
+            'aria-pressed',
+            zoomFitMode === 'fit-page' && matches ? 'true' : 'false',
+          );
+        }
       }
     };
 
@@ -1069,6 +1275,11 @@ function createWindowCanvas() {
 
       if (persistFocus) {
         lastFocusedAt = Date.now();
+      }
+
+      syncFocusMetadata();
+
+      if (persistFocus) {
         schedulePersist();
       }
     };
@@ -1142,7 +1353,13 @@ function createWindowCanvas() {
       commitPageChange(target);
     };
 
-    const commitZoomChange = (zoom) => {
+    const commitZoomChange = (zoom, { mode = 'manual' } = {}) => {
+      const normalizedMode =
+        mode === 'fit-width' || mode === 'fit-page' ? mode : 'manual';
+
+      zoomFitMode = normalizedMode;
+      windowElement.dataset.zoomFitMode = zoomFitMode;
+
       const nextZoom = clampZoom(zoom);
 
       if (Math.abs(nextZoom - currentZoom) < 0.0001) {
@@ -1162,6 +1379,7 @@ function createWindowCanvas() {
           zoom: currentZoom,
           page: currentPage,
           rotation: currentRotation,
+          mode: zoomFitMode,
         },
       });
       windowElement.dispatchEvent(zoomChange);
@@ -1394,6 +1612,14 @@ function createWindowCanvas() {
 
       if (zoomResetButton) {
         zoomResetButton.setAttribute('aria-label', `${windowTitle} の表示倍率をリセット`);
+      }
+
+      if (zoomFitWidthButton) {
+        zoomFitWidthButton.setAttribute('aria-label', `${windowTitle} を幅に合わせて表示`);
+      }
+
+      if (zoomFitPageButton) {
+        zoomFitPageButton.setAttribute('aria-label', `${windowTitle} を全体が収まるよう表示`);
       }
 
       if (rotateLeftButton) {
@@ -1815,7 +2041,40 @@ function createWindowCanvas() {
       resetZoom();
     });
 
-    zoomGroup.append(zoomOutButton, zoomDisplay, zoomInButton, zoomResetButton);
+    zoomFitWidthButton = document.createElement('button');
+    zoomFitWidthButton.type = 'button';
+    zoomFitWidthButton.className = 'workspace__window-zoom-fit workspace__window-zoom-fit--width';
+    zoomFitWidthButton.textContent = '幅合わせ';
+    zoomFitWidthButton.setAttribute('aria-pressed', 'false');
+    zoomFitWidthButton.addEventListener('click', () => {
+      const target = computeFitZoom('width');
+
+      if (Number.isFinite(target)) {
+        commitZoomChange(target, { mode: 'fit-width' });
+      }
+    });
+
+    zoomFitPageButton = document.createElement('button');
+    zoomFitPageButton.type = 'button';
+    zoomFitPageButton.className = 'workspace__window-zoom-fit workspace__window-zoom-fit--page';
+    zoomFitPageButton.textContent = '全体表示';
+    zoomFitPageButton.setAttribute('aria-pressed', 'false');
+    zoomFitPageButton.addEventListener('click', () => {
+      const target = computeFitZoom('page');
+
+      if (Number.isFinite(target)) {
+        commitZoomChange(target, { mode: 'fit-page' });
+      }
+    });
+
+    zoomGroup.append(
+      zoomOutButton,
+      zoomDisplay,
+      zoomInButton,
+      zoomResetButton,
+      zoomFitWidthButton,
+      zoomFitPageButton,
+    );
 
     const adjustmentsGroup = document.createElement('div');
     adjustmentsGroup.className = 'workspace__window-adjustments';
@@ -2059,7 +2318,15 @@ function createWindowCanvas() {
     }
 
     area.append(windowElement);
-    windowRegistry.set(windowId, { element: windowElement, bringToFront, dispose: disposeWindow });
+    windowRegistry.set(windowId, {
+      element: windowElement,
+      bringToFront,
+      dispose: disposeWindow,
+      getLastFocused: () => lastFocusedAt,
+      getOpenedAt: () => openedAt,
+      getTitle: () => windowTitle,
+      id: windowId,
+    });
 
     if (shouldAutoFocus) {
       bringToFront();
@@ -2074,6 +2341,33 @@ function createWindowCanvas() {
     return windowElement;
   };
 
+  const getWindowEntries = () => {
+    return Array.from(windowRegistry.entries())
+      .map(([id, entry]) => ({
+        id,
+        element: entry?.element,
+        bringToFront: entry?.bringToFront,
+        lastFocusedAt: entry?.getLastFocused ? entry.getLastFocused() : undefined,
+        openedAt: entry?.getOpenedAt ? entry.getOpenedAt() : undefined,
+        title: entry?.getTitle ? entry.getTitle() : undefined,
+      }))
+      .filter((entry) => entry.element instanceof HTMLElement)
+      .sort((a, b) => {
+        const aOrder = Number.isFinite(a.lastFocusedAt)
+          ? a.lastFocusedAt
+          : Number.isFinite(a.openedAt)
+            ? a.openedAt
+            : 0;
+        const bOrder = Number.isFinite(b.lastFocusedAt)
+          ? b.lastFocusedAt
+          : Number.isFinite(b.openedAt)
+            ? b.openedAt
+            : 0;
+
+        return bOrder - aOrder;
+      });
+  };
+
   const focusWindow = (id, { persistFocus = true } = {}) => {
     const entry = windowRegistry.get(id);
 
@@ -2084,6 +2378,49 @@ function createWindowCanvas() {
     entry.bringToFront({ persistFocus });
     entry.element.focus({ preventScroll: true });
     return entry.element;
+  };
+
+  const cycleFocus = (direction = 'next') => {
+    const entries = getWindowEntries();
+
+    if (entries.length <= 1) {
+      return null;
+    }
+
+    const activeElement = document.activeElement instanceof HTMLElement
+      ? document.activeElement.closest('.workspace__window')
+      : null;
+    let currentIndex = entries.findIndex((entry) => entry.element === activeElement);
+
+    if (currentIndex < 0) {
+      const activeClassIndex = entries.findIndex((entry) =>
+        entry.element.classList.contains('workspace__window--active'),
+      );
+      currentIndex = activeClassIndex >= 0 ? activeClassIndex : 0;
+    }
+    const offset = direction === 'previous' ? -1 : 1;
+    const nextIndex = (currentIndex + offset + entries.length) % entries.length;
+    const target = entries[nextIndex];
+
+    if (!target || typeof target.bringToFront !== 'function') {
+      return null;
+    }
+
+    target.bringToFront();
+    target.element.focus({ preventScroll: true });
+
+    const cycleEvent = new CustomEvent(WINDOW_FOCUS_CYCLE_EVENT, {
+      bubbles: true,
+      detail: {
+        direction: direction === 'previous' ? 'previous' : 'next',
+        windowId: target.id,
+        title: typeof target.title === 'string' ? target.title : undefined,
+        totalWindows: entries.length,
+      },
+    });
+
+    target.element.dispatchEvent(cycleEvent);
+    return target.element;
   };
 
   const closeAllWindows = ({ emitClose = true } = {}) => {
@@ -2106,6 +2443,7 @@ function createWindowCanvas() {
     element: section,
     openWindow,
     focusWindow,
+    cycleFocus,
     closeAllWindows,
     getWindowCount,
   };
@@ -2216,6 +2554,44 @@ export function createWorkspace() {
       // Persistence is best-effort; ignore restoration issues to keep the UI responsive.
     }
   })();
+
+  workspace.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest('input, textarea, [contenteditable="true"]')
+    ) {
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
+
+    const isNextKey = event.key === ']' || event.code === 'BracketRight';
+    const isPreviousKey = event.key === '[' || event.code === 'BracketLeft';
+
+    if (isNextKey) {
+      const cycled = canvas.cycleFocus('next');
+
+      if (cycled) {
+        event.preventDefault();
+      }
+
+      return;
+    }
+
+    if (isPreviousKey) {
+      const cycled = canvas.cycleFocus('previous');
+
+      if (cycled) {
+        event.preventDefault();
+      }
+    }
+  });
 
   workspace.append(
     createHeader(),

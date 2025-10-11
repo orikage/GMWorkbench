@@ -39,7 +39,19 @@ function updateStatus(statusElement, message) {
   }
 }
 
-function updateMetadata(container, { page, zoom, totalPages, rotation }) {
+function updateMetadata(
+  container,
+  {
+    page,
+    zoom,
+    totalPages,
+    rotation,
+    viewportWidth,
+    viewportHeight,
+    pageWidth,
+    pageHeight,
+  } = {},
+) {
   if (!container) {
     return;
   }
@@ -66,6 +78,34 @@ function updateMetadata(container, { page, zoom, totalPages, rotation }) {
     container.dataset.rotation = String(rotation);
   } else {
     delete container.dataset.rotation;
+  }
+
+  if (Number.isFinite(viewportWidth) && viewportWidth > 0) {
+    container.dataset.viewportWidth = String(
+      Number.parseFloat(viewportWidth.toFixed(2)),
+    );
+  } else {
+    delete container.dataset.viewportWidth;
+  }
+
+  if (Number.isFinite(viewportHeight) && viewportHeight > 0) {
+    container.dataset.viewportHeight = String(
+      Number.parseFloat(viewportHeight.toFixed(2)),
+    );
+  } else {
+    delete container.dataset.viewportHeight;
+  }
+
+  if (Number.isFinite(pageWidth) && pageWidth > 0) {
+    container.dataset.pageWidth = String(Number.parseFloat(pageWidth.toFixed(2)));
+  } else {
+    delete container.dataset.pageWidth;
+  }
+
+  if (Number.isFinite(pageHeight) && pageHeight > 0) {
+    container.dataset.pageHeight = String(Number.parseFloat(pageHeight.toFixed(2)));
+  } else {
+    delete container.dataset.pageHeight;
   }
 }
 
@@ -139,6 +179,7 @@ export function createPdfViewer(file) {
 
   let pdfDocument = null;
   let renderTask = null;
+  let lastViewportMetrics = null;
 
   const load = async () => {
     updateStatus(status, 'PDFを読み込み中…');
@@ -176,9 +217,33 @@ export function createPdfViewer(file) {
         ? ((Math.round(rotation / 90) * 90) % 360 + 360) % 360
         : 0;
       const viewport = pdfPage.getViewport({ scale: zoom, rotation: normalizedRotation });
+      const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+      const baseWidth = viewport.width / safeZoom;
+      const baseHeight = viewport.height / safeZoom;
+      lastViewportMetrics = {
+        page,
+        zoom: safeZoom,
+        rotation: normalizedRotation,
+        width: viewport.width,
+        height: viewport.height,
+        pageWidth: baseWidth,
+        pageHeight: baseHeight,
+        totalPages: Number.isFinite(pdfDocument.numPages) ? pdfDocument.numPages : null,
+      };
+      updateMetadata(container, {
+        page,
+        zoom: safeZoom,
+        totalPages: lastViewportMetrics.totalPages ?? undefined,
+        rotation: normalizedRotation,
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+        pageWidth: baseWidth,
+        pageHeight: baseHeight,
+      });
       const renderContext = prepareCanvas(canvas, viewport);
 
       if (!renderContext) {
+        lastViewportMetrics = null;
         updateStatus(status, 'この環境ではPDF描画を利用できません。');
         return;
       }
@@ -193,6 +258,7 @@ export function createPdfViewer(file) {
 
       updateStatus(status, 'ページの描画に失敗しました。');
       // 状態表示で通知済みのためログは抑制する。
+      lastViewportMetrics = null;
     } finally {
       renderTask = null;
     }
@@ -215,6 +281,8 @@ export function createPdfViewer(file) {
 
     pdfDocument = null;
     updateStatus(status, '');
+    lastViewportMetrics = null;
+    updateMetadata(container, {});
   };
 
   return {
@@ -226,6 +294,13 @@ export function createPdfViewer(file) {
     destroy,
     updateState(state) {
       updateMetadata(container, state);
+    },
+    getViewportMetrics() {
+      if (!lastViewportMetrics) {
+        return null;
+      }
+
+      return { ...lastViewportMetrics };
     },
   };
 }
