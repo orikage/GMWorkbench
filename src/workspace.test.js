@@ -16,6 +16,18 @@ const pdfMocks = vi.hoisted(() => {
   };
 });
 
+const storageMocks = vi.hoisted(() => {
+  const load = vi.fn();
+  const persist = vi.fn();
+  const remove = vi.fn();
+
+  return {
+    load,
+    persist,
+    remove,
+  };
+});
+
 vi.mock('pdfjs-dist', () => ({
   getDocument: pdfMocks.getDocumentMock,
   GlobalWorkerOptions: { workerSrc: '' },
@@ -28,6 +40,12 @@ vi.mock(
   }),
   { virtual: true },
 );
+
+vi.mock('./workspace-storage.js', () => ({
+  loadWorkspaceWindows: storageMocks.load,
+  persistWorkspaceWindow: storageMocks.persist,
+  removeWorkspaceWindow: storageMocks.remove,
+}));
 
 import { createWorkspace } from './workspace.js';
 
@@ -63,6 +81,14 @@ beforeEach(() => {
   pdfMocks.getPageMock.mockReset();
   pdfMocks.getDocumentMock.mockReset();
   pdfMocks.destroyMock.mockReset();
+
+  storageMocks.load.mockReset();
+  storageMocks.persist.mockReset();
+  storageMocks.remove.mockReset();
+
+  storageMocks.load.mockResolvedValue([]);
+  storageMocks.persist.mockResolvedValue();
+  storageMocks.remove.mockResolvedValue();
 
   pdfMocks.renderMock.mockImplementation(() => ({ promise: Promise.resolve() }));
   pdfMocks.getPageMock.mockImplementation(async () => ({
@@ -143,6 +169,56 @@ describe('createWorkspace', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.files).toEqual([file]);
+  });
+
+  it('restores persisted windows with their saved layout and focus', async () => {
+    const persistedFile = new File(['persisted'], 'stored.pdf', {
+      type: 'application/pdf',
+      lastModified: 123,
+    });
+
+    storageMocks.load.mockResolvedValue([
+      {
+        id: 'stored-window',
+        file: persistedFile,
+        page: 2,
+        zoom: 1.25,
+        left: 48,
+        top: 64,
+        width: 512,
+        height: 420,
+        pinned: true,
+        totalPages: 6,
+        openedAt: 10,
+        lastFocusedAt: 20,
+        persisted: true,
+      },
+    ]);
+
+    const workspace = createWorkspace();
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(storageMocks.load).toHaveBeenCalledTimes(1);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+
+    expect(windowElement).not.toBeNull();
+    expect(windowElement?.classList.contains('workspace__window--pinned')).toBe(true);
+    expect(windowElement?.style.left).toBe('48px');
+    expect(windowElement?.style.top).toBe('64px');
+    expect(windowElement?.style.width).toBe('512px');
+    expect(windowElement?.style.height).toBe('420px');
+
+    const pageInput = workspace.querySelector('.workspace__window-page-input');
+    const zoomDisplay = workspace.querySelector('.workspace__window-zoom-display');
+
+    expect(pageInput?.value).toBe('2');
+    expect(zoomDisplay?.textContent).toBe('125%');
+
+    const activeWindow = workspace.querySelector('.workspace__window--active');
+    expect(activeWindow).toBe(windowElement);
   });
 
   it('lists selected files in the intake queue with metadata', () => {
@@ -826,7 +902,13 @@ describe('createWorkspace', () => {
   it('closes windows and emits a closure event', async () => {
     const workspace = createWorkspace();
     const file = new File(['dummy'], 'close.pdf', { type: 'application/pdf' });
+    storageMocks.persist.mockClear();
+    storageMocks.remove.mockClear();
+
     await openWindow(workspace, file);
+    await flushPromises();
+
+    expect(storageMocks.persist).toHaveBeenCalled();
 
     const closeButton = workspace.querySelector('.workspace__window-close');
 
@@ -837,10 +919,20 @@ describe('createWorkspace', () => {
     const handler = vi.fn();
     workspace.addEventListener('workspace:window-close', handler);
 
+    const windowElement = workspace.querySelector('.workspace__window');
+
     closeButton.click();
+
+    await flushPromises();
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.file).toBe(file);
     expect(workspace.querySelector('.workspace__window')).toBeNull();
+
+    if (windowElement?.dataset.windowId) {
+      expect(storageMocks.remove).toHaveBeenCalledWith(windowElement.dataset.windowId);
+    } else {
+      expect(storageMocks.remove).toHaveBeenCalled();
+    }
   });
 });

@@ -1,4 +1,9 @@
 import { createPdfViewer } from './pdf-viewer.js';
+import {
+  loadWorkspaceWindows,
+  persistWorkspaceWindow,
+  removeWorkspaceWindow,
+} from './workspace-storage.js';
 
 const TITLE = 'GMWorkbench';
 const TAGLINE = 'PDFシナリオの仮想デスク';
@@ -261,6 +266,8 @@ function createWindowCanvas() {
   area.className = 'workspace__windows';
   area.setAttribute('role', 'list');
 
+  const windowRegistry = new Map();
+
   const syncEmptyState = () => {
     emptyState.hidden = area.children.length > 0;
   };
@@ -270,30 +277,64 @@ function createWindowCanvas() {
   let zIndexCounter = 1;
   let pinnedZIndexCounter = 10000;
 
-  const openWindow = (file) => {
+  const parsePixels = (value, fallback) => {
+    const numeric = Number.parseFloat(value);
+
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+
+    return fallback;
+  };
+
+  const getAreaSize = () => {
+    const rect = area.getBoundingClientRect();
+    const width = rect.width || area.clientWidth || area.scrollWidth || CANVAS_FALLBACK_WIDTH;
+    const height = rect.height || area.clientHeight || area.scrollHeight || CANVAS_FALLBACK_HEIGHT;
+
+    return {
+      width,
+      height,
+    };
+  };
+
+  const openWindow = (file, options = {}) => {
     const windowElement = document.createElement('article');
     windowElement.className = 'workspace__window';
     windowElement.setAttribute('role', 'group');
     windowElement.setAttribute('aria-label', `${file.name} のウィンドウ`);
     windowElement.tabIndex = 0;
 
-    const offset = area.children.length * WINDOW_STACK_OFFSET;
-    windowElement.style.left = `${offset}px`;
-    windowElement.style.top = `${offset}px`;
-    windowElement.style.width = `${DEFAULT_WINDOW_WIDTH}px`;
-    windowElement.style.height = `${DEFAULT_WINDOW_HEIGHT}px`;
+    const offsetIndex = area.children.length;
+    const defaultLeft = offsetIndex * WINDOW_STACK_OFFSET;
+    const defaultTop = offsetIndex * WINDOW_STACK_OFFSET;
+    const initialLeft = Number.isFinite(options.left) ? options.left : defaultLeft;
+    const initialTop = Number.isFinite(options.top) ? options.top : defaultTop;
+    const initialWidth = Number.isFinite(options.width)
+      ? options.width
+      : DEFAULT_WINDOW_WIDTH;
+    const initialHeight = Number.isFinite(options.height)
+      ? options.height
+      : DEFAULT_WINDOW_HEIGHT;
 
-    const header = document.createElement('header');
-    header.className = 'workspace__window-header';
+    windowElement.style.left = `${initialLeft}px`;
+    windowElement.style.top = `${initialTop}px`;
+    windowElement.style.width = `${initialWidth}px`;
+    windowElement.style.height = `${initialHeight}px`;
 
-    const title = document.createElement('h3');
-    title.className = 'workspace__window-title';
-    title.textContent = file.name;
+    const windowId =
+      typeof options.id === 'string' && options.id.length > 0
+        ? options.id
+        : typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `window-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    const controls = document.createElement('div');
-    controls.className = 'workspace__window-controls';
+    windowElement.dataset.windowId = windowId;
 
-    let currentPage = 1;
+    const shouldAutoFocus = options.autoFocus !== false;
+    let currentPage = Number.isFinite(options.page)
+      ? Math.max(1, Math.floor(options.page))
+      : 1;
     let pageInput;
     let prevButton;
     let nextButton;
@@ -301,10 +342,71 @@ function createWindowCanvas() {
     let zoomInButton;
     let zoomResetButton;
     let zoomDisplay;
-    let currentZoom = DEFAULT_WINDOW_ZOOM;
-    let totalPages = null;
+    let currentZoom = Number.isFinite(options.zoom)
+      ? Number.parseFloat(options.zoom)
+      : DEFAULT_WINDOW_ZOOM;
+    let totalPages = Number.isFinite(options.totalPages) ? options.totalPages : null;
+    let openedAt = Number.isFinite(options.openedAt) ? options.openedAt : Date.now();
+    let lastFocusedAt = Number.isFinite(options.lastFocusedAt)
+      ? options.lastFocusedAt
+      : openedAt;
+    let hasStoredFile = options.persisted === true;
 
     const viewer = createPdfViewer(file);
+
+    const getWindowSize = () => ({
+      width: parsePixels(windowElement.style.width, DEFAULT_WINDOW_WIDTH),
+      height: parsePixels(windowElement.style.height, DEFAULT_WINDOW_HEIGHT),
+    });
+
+    const clampPosition = (left, top) => {
+      const { width: areaWidth, height: areaHeight } = getAreaSize();
+      const { width: windowWidth, height: windowHeight } = getWindowSize();
+      const maxLeft = Math.max(0, areaWidth - windowWidth);
+      const maxTop = Math.max(0, areaHeight - windowHeight);
+
+      return {
+        left: Math.min(Math.max(0, left), maxLeft),
+        top: Math.min(Math.max(0, top), maxTop),
+      };
+    };
+
+    const persistState = async ({ includeFile = false } = {}) => {
+      const descriptor = {
+        id: windowId,
+        name: file.name,
+        type: file.type,
+        lastModified: file.lastModified,
+        left: parsePixels(windowElement.style.left, initialLeft),
+        top: parsePixels(windowElement.style.top, initialTop),
+        width: parsePixels(windowElement.style.width, initialWidth),
+        height: parsePixels(windowElement.style.height, initialHeight),
+        page: currentPage,
+        zoom: currentZoom,
+        totalPages: Number.isFinite(totalPages) ? totalPages : undefined,
+        pinned: windowElement.classList.contains('workspace__window--pinned'),
+        openedAt,
+        lastFocusedAt,
+      };
+
+      if (includeFile) {
+        descriptor.file = file;
+      }
+
+      await persistWorkspaceWindow(descriptor, { includeFile });
+    };
+
+    const schedulePersist = ({ includeFile = false } = {}) => {
+      const shouldIncludeFile = includeFile || !hasStoredFile;
+
+      persistState({ includeFile: shouldIncludeFile })
+        .then(() => {
+          if (shouldIncludeFile) {
+            hasStoredFile = true;
+          }
+        })
+        .catch(() => {});
+    };
 
     const updateViewerState = () => {
       viewer.updateState({ page: currentPage, zoom: currentZoom, totalPages });
@@ -378,6 +480,25 @@ function createWindowCanvas() {
 
     const isDefaultZoom = () => Math.abs(currentZoom - DEFAULT_WINDOW_ZOOM) < 0.001;
 
+    const clampZoom = (value) => {
+      if (!Number.isFinite(value)) {
+        return currentZoom;
+      }
+
+      if (value < MIN_WINDOW_ZOOM) {
+        return MIN_WINDOW_ZOOM;
+      }
+
+      if (value > MAX_WINDOW_ZOOM) {
+        return MAX_WINDOW_ZOOM;
+      }
+
+      return Number.parseFloat(value.toFixed(2));
+    };
+
+    currentZoom = clampZoom(currentZoom);
+    currentPage = clampPage(currentPage);
+
     const syncZoomState = () => {
       if (zoomDisplay) {
         const percentage = Math.round(currentZoom * 100);
@@ -394,6 +515,45 @@ function createWindowCanvas() {
 
       if (zoomResetButton) {
         zoomResetButton.disabled = isDefaultZoom();
+      }
+    };
+
+    const isPinned = () => windowElement.classList.contains('workspace__window--pinned');
+
+    const assignZIndex = (customValue) => {
+      if (Number.isFinite(customValue)) {
+        windowElement.style.zIndex = String(customValue);
+
+        if (isPinned()) {
+          pinnedZIndexCounter = Math.max(pinnedZIndexCounter, customValue + 1);
+        } else {
+          zIndexCounter = Math.max(zIndexCounter, customValue + 1);
+        }
+
+        return;
+      }
+
+      if (isPinned()) {
+        windowElement.style.zIndex = String(pinnedZIndexCounter);
+        pinnedZIndexCounter += 1;
+      } else {
+        windowElement.style.zIndex = String(zIndexCounter);
+        zIndexCounter += 1;
+      }
+    };
+
+    const bringToFront = ({ persistFocus = true } = {}) => {
+      area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
+        if (otherWindow !== windowElement) {
+          otherWindow.classList.remove('workspace__window--active');
+        }
+      });
+      windowElement.classList.add('workspace__window--active');
+      assignZIndex();
+
+      if (persistFocus) {
+        lastFocusedAt = Date.now();
+        schedulePersist();
       }
     };
 
@@ -419,6 +579,7 @@ function createWindowCanvas() {
         },
       });
       windowElement.dispatchEvent(pageChange);
+      schedulePersist();
     };
 
     const stepPage = (offset) => {
@@ -430,22 +591,6 @@ function createWindowCanvas() {
       }
 
       commitPageChange(nextPage);
-    };
-
-    const clampZoom = (value) => {
-      if (!Number.isFinite(value)) {
-        return currentZoom;
-      }
-
-      if (value < MIN_WINDOW_ZOOM) {
-        return MIN_WINDOW_ZOOM;
-      }
-
-      if (value > MAX_WINDOW_ZOOM) {
-        return MAX_WINDOW_ZOOM;
-      }
-
-      return Number.parseFloat(value.toFixed(2));
     };
 
     const commitZoomChange = (zoom) => {
@@ -470,6 +615,7 @@ function createWindowCanvas() {
         },
       });
       windowElement.dispatchEvent(zoomChange);
+      schedulePersist();
     };
 
     const stepZoom = (delta) => {
@@ -480,17 +626,15 @@ function createWindowCanvas() {
       commitZoomChange(DEFAULT_WINDOW_ZOOM);
     };
 
-    const isPinned = () => windowElement.classList.contains('workspace__window--pinned');
+    const header = document.createElement('header');
+    header.className = 'workspace__window-header';
 
-    const assignZIndex = () => {
-      if (isPinned()) {
-        windowElement.style.zIndex = String(pinnedZIndexCounter);
-        pinnedZIndexCounter += 1;
-      } else {
-        windowElement.style.zIndex = String(zIndexCounter);
-        zIndexCounter += 1;
-      }
-    };
+    const title = document.createElement('h3');
+    title.className = 'workspace__window-title';
+    title.textContent = file.name;
+
+    const controls = document.createElement('div');
+    controls.className = 'workspace__window-controls';
 
     const pinButton = document.createElement('button');
     pinButton.type = 'button';
@@ -505,16 +649,6 @@ function createWindowCanvas() {
       pinButton.textContent = pinned ? 'ピン解除' : 'ピン留め';
     };
 
-    const bringToFront = () => {
-      area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
-        if (otherWindow !== windowElement) {
-          otherWindow.classList.remove('workspace__window--active');
-        }
-      });
-      windowElement.classList.add('workspace__window--active');
-      assignZIndex();
-    };
-
     pinButton.addEventListener('click', () => {
       const nextPinned = !isPinned();
       updatePinVisualState(nextPinned);
@@ -524,6 +658,7 @@ function createWindowCanvas() {
       });
       windowElement.dispatchEvent(toggle);
       bringToFront();
+      schedulePersist();
     });
 
     const closeButton = document.createElement('button');
@@ -538,7 +673,9 @@ function createWindowCanvas() {
       windowElement.dispatchEvent(closure);
       viewer.destroy();
       windowElement.remove();
+      windowRegistry.delete(windowId);
       syncEmptyState();
+      removeWorkspaceWindow(windowId).catch(() => {});
     });
 
     controls.append(pinButton, closeButton);
@@ -662,6 +799,7 @@ function createWindowCanvas() {
     syncNavigationState();
     syncZoomState();
     updateViewerState();
+
     void viewer
       .load()
       .then((documentInstance) => {
@@ -671,48 +809,12 @@ function createWindowCanvas() {
 
         syncNavigationState();
         updateViewerState();
+        schedulePersist();
         return renderCurrentPage();
       })
       .catch(() => {});
+
     windowElement.append(header, body);
-
-    const parsePixels = (value, fallback) => {
-      const numeric = Number.parseFloat(value);
-
-      if (Number.isFinite(numeric)) {
-        return numeric;
-      }
-
-      return fallback;
-    };
-
-    const getAreaSize = () => {
-      const rect = area.getBoundingClientRect();
-      const width = rect.width || area.clientWidth || area.scrollWidth || CANVAS_FALLBACK_WIDTH;
-      const height = rect.height || area.clientHeight || area.scrollHeight || CANVAS_FALLBACK_HEIGHT;
-
-      return {
-        width,
-        height,
-      };
-    };
-
-    const getWindowSize = () => ({
-      width: parsePixels(windowElement.style.width, DEFAULT_WINDOW_WIDTH),
-      height: parsePixels(windowElement.style.height, DEFAULT_WINDOW_HEIGHT),
-    });
-
-    const clampPosition = (left, top) => {
-      const { width: areaWidth, height: areaHeight } = getAreaSize();
-      const { width: windowWidth, height: windowHeight } = getWindowSize();
-      const maxLeft = Math.max(0, areaWidth - windowWidth);
-      const maxTop = Math.max(0, areaHeight - windowHeight);
-
-      return {
-        left: Math.min(Math.max(0, left), maxLeft),
-        top: Math.min(Math.max(0, top), maxTop),
-      };
-    };
 
     const handleMouseDown = (event) => {
       bringToFront();
@@ -720,18 +822,22 @@ function createWindowCanvas() {
 
       const startX = event.clientX;
       const startY = event.clientY;
-      const initialLeft = parsePixels(windowElement.style.left, 0);
-      const initialTop = parsePixels(windowElement.style.top, 0);
+      const initialLeftPosition = parsePixels(windowElement.style.left, initialLeft);
+      const initialTopPosition = parsePixels(windowElement.style.top, initialTop);
 
       const handleMouseMove = (moveEvent) => {
         const deltaX = moveEvent.clientX - startX;
         const deltaY = moveEvent.clientY - startY;
-        const { left, top } = clampPosition(initialLeft + deltaX, initialTop + deltaY);
+        const { left, top } = clampPosition(
+          initialLeftPosition + deltaX,
+          initialTopPosition + deltaY,
+        );
         windowElement.style.left = `${left}px`;
         windowElement.style.top = `${top}px`;
       };
 
       const handleMouseUp = () => {
+        schedulePersist();
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
       };
@@ -788,14 +894,8 @@ function createWindowCanvas() {
 
       const startX = event.clientX;
       const startY = event.clientY;
-      const initialWidth = parsePixels(
-        windowElement.style.width,
-        DEFAULT_WINDOW_WIDTH,
-      );
-      const initialHeight = parsePixels(
-        windowElement.style.height,
-        DEFAULT_WINDOW_HEIGHT,
-      );
+      const initialWidthValue = parsePixels(windowElement.style.width, initialWidth);
+      const initialHeightValue = parsePixels(windowElement.style.height, initialHeight);
 
       windowElement.classList.add('workspace__window--resizing');
 
@@ -803,8 +903,8 @@ function createWindowCanvas() {
         const deltaX = moveEvent.clientX - startX;
         const deltaY = moveEvent.clientY - startY;
         const { width: areaWidth, height: areaHeight } = getAreaSize();
-        const currentLeft = parsePixels(windowElement.style.left, 0);
-        const currentTop = parsePixels(windowElement.style.top, 0);
+        const currentLeft = parsePixels(windowElement.style.left, initialLeft);
+        const currentTop = parsePixels(windowElement.style.top, initialTop);
         const availableWidth = Math.max(
           MIN_WINDOW_WIDTH,
           areaWidth - currentLeft,
@@ -814,8 +914,8 @@ function createWindowCanvas() {
           areaHeight - currentTop,
         );
 
-        const proposedWidth = Math.max(MIN_WINDOW_WIDTH, initialWidth + deltaX);
-        const proposedHeight = Math.max(MIN_WINDOW_HEIGHT, initialHeight + deltaY);
+        const proposedWidth = Math.max(MIN_WINDOW_WIDTH, initialWidthValue + deltaX);
+        const proposedHeight = Math.max(MIN_WINDOW_HEIGHT, initialHeightValue + deltaY);
 
         const nextWidth = Math.min(availableWidth, proposedWidth);
         const nextHeight = Math.min(availableHeight, proposedHeight);
@@ -829,6 +929,7 @@ function createWindowCanvas() {
 
       const handleResizeEnd = () => {
         windowElement.classList.remove('workspace__window--resizing');
+        schedulePersist();
         document.removeEventListener('mousemove', handleResizeMove);
         document.removeEventListener('mouseup', handleResizeEnd);
       };
@@ -839,13 +940,37 @@ function createWindowCanvas() {
 
     resizeHandle.addEventListener('mousedown', handleResizeStart);
 
+    if (options.pinned === true) {
+      updatePinVisualState(true);
+    }
+
     windowElement.append(resizeHandle);
     area.append(windowElement);
-    bringToFront();
-    windowElement.focus({ preventScroll: true });
+    windowRegistry.set(windowId, { element: windowElement, bringToFront });
+
+    if (shouldAutoFocus) {
+      bringToFront();
+      windowElement.focus({ preventScroll: true });
+    } else {
+      assignZIndex();
+    }
+
     syncEmptyState();
+    schedulePersist({ includeFile: !hasStoredFile });
 
     return windowElement;
+  };
+
+  const focusWindow = (id, { persistFocus = true } = {}) => {
+    const entry = windowRegistry.get(id);
+
+    if (!entry) {
+      return null;
+    }
+
+    entry.bringToFront({ persistFocus });
+    entry.element.focus({ preventScroll: true });
+    return entry.element;
   };
 
   section.append(heading, emptyState, area);
@@ -853,8 +978,10 @@ function createWindowCanvas() {
   return {
     element: section,
     openWindow,
+    focusWindow,
   };
 }
+
 
 export function createWorkspace() {
   const workspace = document.createElement('div');
@@ -883,6 +1010,67 @@ export function createWorkspace() {
 
     canvas.openWindow(file);
   });
+
+  void (async () => {
+    try {
+      const storedWindows = await loadWorkspaceWindows();
+
+      if (!Array.isArray(storedWindows) || storedWindows.length === 0) {
+        return;
+      }
+
+      const sorted = storedWindows
+        .filter((entry) => entry && entry.file)
+        .sort((a, b) => {
+          const aOrder = Number.isFinite(a.lastFocusedAt)
+            ? a.lastFocusedAt
+            : Number.isFinite(a.openedAt)
+              ? a.openedAt
+              : 0;
+          const bOrder = Number.isFinite(b.lastFocusedAt)
+            ? b.lastFocusedAt
+            : Number.isFinite(b.openedAt)
+              ? b.openedAt
+              : 0;
+          return aOrder - bOrder;
+        });
+
+      let lastFocusedId = null;
+      let lastFocusedTime = Number.NEGATIVE_INFINITY;
+
+      sorted.forEach((entry) => {
+        const { file, ...state } = entry;
+
+        if (!file) {
+          return;
+        }
+
+        const element = canvas.openWindow(file, {
+          ...state,
+          autoFocus: false,
+        });
+
+        if (element && typeof element.dataset?.windowId === 'string') {
+          const focusTimestamp = Number.isFinite(state.lastFocusedAt)
+            ? state.lastFocusedAt
+            : Number.isFinite(state.openedAt)
+              ? state.openedAt
+              : 0;
+
+          if (focusTimestamp >= lastFocusedTime) {
+            lastFocusedTime = focusTimestamp;
+            lastFocusedId = element.dataset.windowId;
+          }
+        }
+      });
+
+      if (lastFocusedId) {
+        canvas.focusWindow(lastFocusedId, { persistFocus: false });
+      }
+    } catch (error) {
+      // Persistence is best-effort; ignore restoration issues to keep the UI responsive.
+    }
+  })();
 
   workspace.append(
     createHeader(),
