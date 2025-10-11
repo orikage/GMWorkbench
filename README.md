@@ -26,6 +26,12 @@ pnpm test
 pnpm vitest -- --watch
 ```
 
+## デプロイ
+
+- 本番環境: http://gmworkbench.orikage.com/
+- GitHub Actions の `Deploy site` ワークフローが `main` ブランチへの push ごとに `pnpm test` と `pnpm build` を実行し、生成された `dist/` を GitHub Pages へ公開します。
+- ローカルで挙動を確認したい場合は `pnpm build` のあと `pnpm preview -- --host` を利用してください。
+
 ## ドキュメント
 
 - [docs/基本要件.md](docs/%E5%9F%BA%E6%9C%AC%E8%A6%81%E4%BB%B6.md)

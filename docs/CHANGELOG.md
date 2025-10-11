@@ -22,6 +22,7 @@
 - [2025-10-11 — ページスライダーの追加](changelog/2025-10-11-window-page-slider.md)
 - [2025-10-11 — ウィンドウブックマークの追加](changelog/2025-10-11-window-bookmarks.md)
 - [2025-10-11 — ウィンドウブックマークのナビゲーション強化](changelog/2025-10-11-window-bookmark-navigation.md)
+- [2025-10-11 — GitHub Pages デプロイパイプラインの整備](changelog/2025-10-11-gh-pages-deploy.md)
 - [2025-10-11 — ウィンドウ回転コントロールの追加](changelog/2025-10-11-window-rotation.md)
 - [2025-10-11 — ウィンドウ最大化トグルの追加](changelog/2025-10-11-window-maximize.md)
 - [2025-10-11 — ズームフィット操作の追加](changelog/2025-10-11-window-zoom-fit.md)
