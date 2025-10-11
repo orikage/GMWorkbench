@@ -24,3 +24,5 @@
 - [2025-10-11: ウィンドウ最大化トグルの導入方針](decisions/2025-10-11-window-maximize.md)
 - [2025-10-11: ズームフィット操作の導入方針](decisions/2025-10-11-window-zoom-fit.md)
 - [2025-10-11: ウィンドウフォーカス循環ショートカットの導入](decisions/2025-10-11-window-focus-cycle.md)
+- [2025-10-11: ウィンドウブックマーク導入の指針](decisions/2025-10-11-window-bookmarks.md)
+- [2025-10-11: ウィンドウブックマークナビゲーションの設計](decisions/2025-10-11-window-bookmark-navigation.md)

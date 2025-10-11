@@ -30,6 +30,8 @@ const WINDOW_COLOR_CHANGE_EVENT = 'workspace:window-color-change';
 const WINDOW_ROTATION_CHANGE_EVENT = 'workspace:window-rotation-change';
 const WINDOW_MAXIMIZE_CHANGE_EVENT = 'workspace:window-maximize-change';
 const WINDOW_FOCUS_CYCLE_EVENT = 'workspace:window-focus-cycle';
+const WINDOW_BOOKMARKS_CHANGE_EVENT = 'workspace:window-bookmarks-change';
+const WINDOW_BOOKMARK_JUMP_EVENT = 'workspace:window-bookmark-jump';
 const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
@@ -38,6 +40,7 @@ const PAGE_HISTORY_LIMIT = 50;
 const WORKSPACE_CACHE_CLEARED_EVENT = 'workspace:cache-cleared';
 const DEFAULT_WINDOW_ROTATION = 0;
 const ROTATION_STEP = 90;
+const MAX_WINDOW_BOOKMARKS = 50;
 const WINDOW_COLORS = [
   { id: 'neutral', label: '標準' },
   { id: 'amber', label: '琥珀' },
@@ -512,6 +515,38 @@ function createWindowCanvas() {
     let notesContent = typeof options.notes === 'string' ? options.notes : '';
     let notesTextarea;
     let notesCounter;
+    let bookmarksList;
+    let bookmarksEmpty;
+    let bookmarkAddButton;
+    let bookmarkPrevButton;
+    let bookmarkNextButton;
+    let bookmarkStatus;
+    const sanitizeBookmarkValue = (value) => {
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+
+      const normalized = Math.max(1, Math.floor(value));
+
+      if (Number.isFinite(options.totalPages)) {
+        const total = Math.max(1, Math.floor(options.totalPages));
+        return Math.min(normalized, total);
+      }
+
+      return normalized;
+    };
+
+    const initialBookmarks = Array.isArray(options.bookmarks)
+      ? options.bookmarks
+          .map(sanitizeBookmarkValue)
+          .filter((value) => Number.isFinite(value))
+      : [];
+
+    let bookmarks = Array.from(new Set(initialBookmarks)).sort((a, b) => a - b);
+
+    if (bookmarks.length > MAX_WINDOW_BOOKMARKS) {
+      bookmarks = bookmarks.slice(-MAX_WINDOW_BOOKMARKS);
+    }
     let resizeHandle;
     let maximizeButton;
     let isMaximized = options.maximized === true;
@@ -759,6 +794,7 @@ function createWindowCanvas() {
         restoreTop: restoreBounds.top,
         restoreWidth: restoreBounds.width,
         restoreHeight: restoreBounds.height,
+        bookmarks: bookmarks.slice(),
       };
 
       if (includeFile) {
@@ -970,6 +1006,359 @@ function createWindowCanvas() {
       }
     };
 
+    const hasBookmark = (page) => bookmarks.includes(page);
+
+    const getNextBookmarkValue = () => {
+      if (bookmarks.length === 0) {
+        return undefined;
+      }
+
+      if (!Number.isFinite(currentPage)) {
+        return bookmarks[0];
+      }
+
+      for (let index = 0; index < bookmarks.length; index += 1) {
+        const value = bookmarks[index];
+
+        if (value > currentPage) {
+          return value;
+        }
+      }
+
+      return undefined;
+    };
+
+    const getPreviousBookmarkValue = () => {
+      if (bookmarks.length === 0) {
+        return undefined;
+      }
+
+      if (!Number.isFinite(currentPage)) {
+        return bookmarks[bookmarks.length - 1];
+      }
+
+      for (let index = bookmarks.length - 1; index >= 0; index -= 1) {
+        const value = bookmarks[index];
+
+        if (value < currentPage) {
+          return value;
+        }
+      }
+
+      return undefined;
+    };
+
+    const syncBookmarkMetadata = () => {
+      windowElement.dataset.bookmarkCount = String(bookmarks.length);
+
+      if (bookmarks.length > 0) {
+        windowElement.dataset.bookmarkPages = bookmarks.join(',');
+      } else {
+        delete windowElement.dataset.bookmarkPages;
+      }
+
+      const nextBookmark = getNextBookmarkValue();
+      const previousBookmark = getPreviousBookmarkValue();
+
+      if (Number.isFinite(nextBookmark)) {
+        windowElement.dataset.bookmarkNext = String(nextBookmark);
+      } else {
+        delete windowElement.dataset.bookmarkNext;
+      }
+
+      if (Number.isFinite(previousBookmark)) {
+        windowElement.dataset.bookmarkPrevious = String(previousBookmark);
+      } else {
+        delete windowElement.dataset.bookmarkPrevious;
+      }
+    };
+
+    const syncBookmarkControls = () => {
+      const alreadySaved = hasBookmark(currentPage);
+      const atCapacity = bookmarks.length >= MAX_WINDOW_BOOKMARKS;
+      const nextBookmark = getNextBookmarkValue();
+      const previousBookmark = getPreviousBookmarkValue();
+
+      if (bookmarkAddButton) {
+        bookmarkAddButton.disabled = alreadySaved || atCapacity;
+
+        let label = `${windowTitle} の現在のページをブックマーク`;
+
+        if (atCapacity) {
+          label = `${windowTitle} のブックマークは上限に達しました`;
+        } else if (alreadySaved) {
+          label = `${windowTitle} の ${currentPage} ページはブックマーク済み`;
+        }
+
+        bookmarkAddButton.setAttribute('aria-label', label);
+      }
+
+      if (bookmarkNextButton) {
+        const hasNext = Number.isFinite(nextBookmark);
+        bookmarkNextButton.disabled = !hasNext;
+
+        if (hasNext) {
+          bookmarkNextButton.setAttribute(
+            'aria-label',
+            `${windowTitle} の ${nextBookmark} ページのブックマークへ進む`,
+          );
+        } else {
+          bookmarkNextButton.setAttribute(
+            'aria-label',
+            `${windowTitle} には後ろ方向のブックマークがありません`,
+          );
+        }
+      }
+
+      if (bookmarkPrevButton) {
+        const hasPrevious = Number.isFinite(previousBookmark);
+        bookmarkPrevButton.disabled = !hasPrevious;
+
+        if (hasPrevious) {
+          bookmarkPrevButton.setAttribute(
+            'aria-label',
+            `${windowTitle} の ${previousBookmark} ページのブックマークへ戻る`,
+          );
+        } else {
+          bookmarkPrevButton.setAttribute(
+            'aria-label',
+            `${windowTitle} には前方向のブックマークがありません`,
+          );
+        }
+      }
+
+      syncBookmarkMetadata();
+    };
+
+    const syncBookmarkStatus = (message, { isError = false } = {}) => {
+      if (!bookmarkStatus) {
+        return;
+      }
+
+      bookmarkStatus.textContent = message;
+      bookmarkStatus.hidden = message.length === 0;
+      bookmarkStatus.classList.toggle(
+        'workspace__window-bookmarks-status--error',
+        isError,
+      );
+    };
+
+    const renderBookmarks = () => {
+      if (!bookmarksList || !bookmarksEmpty) {
+        return;
+      }
+
+      bookmarksList.textContent = '';
+
+      if (bookmarks.length === 0) {
+        bookmarksEmpty.hidden = false;
+        return;
+      }
+
+      bookmarksEmpty.hidden = true;
+
+      bookmarks.forEach((page) => {
+        const item = document.createElement('li');
+        item.className = 'workspace__window-bookmarks-item';
+        item.dataset.bookmarkPage = String(page);
+
+        const jumpButton = document.createElement('button');
+        jumpButton.type = 'button';
+        jumpButton.className = 'workspace__window-bookmark-jump';
+        jumpButton.textContent = `${page}ページ目`;
+        jumpButton.setAttribute('aria-label', `${windowTitle} の ${page} ページへ移動`);
+        jumpButton.addEventListener('click', () => {
+          jumpToBookmark(page, { source: 'list' });
+        });
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'workspace__window-bookmark-remove';
+        removeButton.textContent = '削除';
+        removeButton.setAttribute(
+          'aria-label',
+          `${windowTitle} の ${page} ページのブックマークを削除`,
+        );
+        removeButton.addEventListener('click', () => {
+          removeBookmark(page);
+        });
+
+        item.append(jumpButton, removeButton);
+        bookmarksList.append(item);
+      });
+    };
+
+    const syncBookmarksDisplay = () => {
+      renderBookmarks();
+      syncBookmarkMetadata();
+      syncBookmarkControls();
+    };
+
+    const clampBookmarksToBounds = () => {
+      const sanitized = bookmarks
+        .filter((value) => Number.isFinite(value))
+        .map((value) => Math.max(1, Math.floor(value)));
+
+      let bounded = sanitized;
+
+      if (Number.isFinite(totalPages)) {
+        const limit = Math.max(1, Math.floor(totalPages));
+        bounded = bounded.map((value) => Math.min(value, limit));
+      }
+
+      const deduped = [];
+      bounded
+        .sort((a, b) => a - b)
+        .forEach((value) => {
+          if (!deduped.includes(value)) {
+            deduped.push(value);
+          }
+        });
+
+      if (deduped.length > MAX_WINDOW_BOOKMARKS) {
+        deduped.splice(0, deduped.length - MAX_WINDOW_BOOKMARKS);
+      }
+
+      const changed =
+        deduped.length !== bookmarks.length ||
+        deduped.some((value, index) => value !== bookmarks[index]);
+
+      if (changed) {
+        bookmarks = deduped;
+
+        if (bookmarksList) {
+          syncBookmarksDisplay();
+        } else {
+          syncBookmarkMetadata();
+        }
+
+        schedulePersist();
+      } else if (bookmarksList) {
+        syncBookmarkControls();
+      } else {
+        syncBookmarkMetadata();
+      }
+    };
+
+    const addBookmark = (page = currentPage) => {
+      const target = clampPage(page);
+
+      if (!Number.isFinite(target)) {
+        syncBookmarkStatus('');
+        return false;
+      }
+
+      if (bookmarks.length >= MAX_WINDOW_BOOKMARKS) {
+        syncBookmarkStatus('ブックマークは上限に達しました。', { isError: true });
+        syncBookmarkControls();
+        return false;
+      }
+
+      if (hasBookmark(target)) {
+        syncBookmarkStatus(`${target}ページ目はすでに保存済みです。`, { isError: true });
+        syncBookmarkControls();
+        return false;
+      }
+
+      bookmarks.push(target);
+      bookmarks.sort((a, b) => a - b);
+      syncBookmarksDisplay();
+
+      const change = new CustomEvent(WINDOW_BOOKMARKS_CHANGE_EVENT, {
+        bubbles: true,
+        detail: { file, bookmarks: bookmarks.slice(), action: 'add', page: target },
+      });
+
+      windowElement.dispatchEvent(change);
+      schedulePersist();
+      syncBookmarkStatus(`${target}ページ目を保存しました。`);
+      return true;
+    };
+
+    const removeBookmark = (page) => {
+      const target = clampPage(page);
+      const index = bookmarks.indexOf(target);
+
+      if (index < 0) {
+        return false;
+      }
+
+      bookmarks.splice(index, 1);
+      syncBookmarksDisplay();
+
+      const change = new CustomEvent(WINDOW_BOOKMARKS_CHANGE_EVENT, {
+        bubbles: true,
+        detail: { file, bookmarks: bookmarks.slice(), action: 'remove', page: target },
+      });
+
+      windowElement.dispatchEvent(change);
+      schedulePersist();
+
+      if (bookmarks.length === 0) {
+        syncBookmarkStatus('ブックマークはすべて削除されました。');
+      } else {
+        syncBookmarkStatus(`${target}ページ目のブックマークを削除しました。`);
+      }
+
+      return true;
+    };
+
+    const jumpToBookmark = (page, { source = 'list' } = {}) => {
+      const target = clampPage(page);
+
+      if (!Number.isFinite(target) || !hasBookmark(target)) {
+        syncBookmarkStatus('指定したブックマークは見つかりませんでした。', {
+          isError: true,
+        });
+        return false;
+      }
+
+      commitPageChange(target);
+
+      const nextBookmark = getNextBookmarkValue();
+      const previousBookmark = getPreviousBookmarkValue();
+
+      const jumpEvent = new CustomEvent(WINDOW_BOOKMARK_JUMP_EVENT, {
+        bubbles: true,
+        detail: {
+          file,
+          page: target,
+          bookmarks: bookmarks.slice(),
+          source,
+          next: Number.isFinite(nextBookmark) ? nextBookmark : null,
+          previous: Number.isFinite(previousBookmark) ? previousBookmark : null,
+        },
+      });
+
+      windowElement.dispatchEvent(jumpEvent);
+      syncBookmarkStatus(`${target}ページ目へ移動しました。`);
+      return true;
+    };
+
+    const goToNextBookmark = ({ source = 'next-button' } = {}) => {
+      const nextBookmark = getNextBookmarkValue();
+
+      if (!Number.isFinite(nextBookmark)) {
+        syncBookmarkStatus('後ろのブックマークはありません。', { isError: true });
+        syncBookmarkControls();
+        return false;
+      }
+
+      return jumpToBookmark(nextBookmark, { source });
+    };
+
+    const goToPreviousBookmark = ({ source = 'previous-button' } = {}) => {
+      const previousBookmark = getPreviousBookmarkValue();
+
+      if (!Number.isFinite(previousBookmark)) {
+        syncBookmarkStatus('前のブックマークはありません。', { isError: true });
+        syncBookmarkControls();
+        return false;
+      }
+
+      return jumpToBookmark(previousBookmark, { source });
+    };
+
     const syncNavigationState = () => {
       if (pageInput) {
         pageInput.value = String(currentPage);
@@ -1028,6 +1417,7 @@ function createWindowCanvas() {
 
       windowElement.dataset.pageHistoryIndex = String(pageHistoryIndex);
       windowElement.dataset.pageHistoryLength = String(pageHistory.length);
+      syncBookmarkControls();
     };
 
     const isDefaultZoom = () => Math.abs(currentZoom - DEFAULT_WINDOW_ZOOM) < 0.001;
@@ -1659,6 +2049,10 @@ function createWindowCanvas() {
         resizeHandle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
       }
 
+      if (bookmarkAddButton) {
+        syncBookmarkControls();
+      }
+
       syncColorButton();
     };
 
@@ -1672,6 +2066,7 @@ function createWindowCanvas() {
       titleInput.placeholder = windowTitle;
       windowElement.dataset.windowTitle = windowTitle;
       syncControlLabels();
+      syncBookmarksDisplay();
     };
 
     const finishTitleEdit = ({ commit }) => {
@@ -1785,6 +2180,7 @@ function createWindowCanvas() {
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
         color: windowColor,
+        bookmarks: bookmarks.slice(),
         restoreLeft: currentLeft,
         restoreTop: currentTop,
         restoreWidth: currentWidth,
@@ -1810,6 +2206,7 @@ function createWindowCanvas() {
           title: windowTitle,
           color: windowColor,
           maximized: isMaximized,
+          bookmarks: bookmarks.slice(),
         },
       });
 
@@ -1839,6 +2236,77 @@ function createWindowCanvas() {
 
     const toolbar = document.createElement('div');
     toolbar.className = 'workspace__window-toolbar';
+
+    const bookmarksSection = document.createElement('section');
+    bookmarksSection.className = 'workspace__window-bookmarks';
+
+    const bookmarksHeader = document.createElement('div');
+    bookmarksHeader.className = 'workspace__window-bookmarks-header';
+
+    const bookmarksLabel = document.createElement('span');
+    bookmarksLabel.className = 'workspace__window-bookmarks-label';
+    bookmarksLabel.textContent = 'ブックマーク';
+
+    const bookmarksControls = document.createElement('div');
+    bookmarksControls.className = 'workspace__window-bookmarks-controls';
+
+    bookmarkPrevButton = document.createElement('button');
+    bookmarkPrevButton.type = 'button';
+    bookmarkPrevButton.className = 'workspace__window-bookmark-prev';
+    bookmarkPrevButton.textContent = '前のブックマーク';
+    bookmarkPrevButton.addEventListener('click', () => {
+      bringToFront();
+      goToPreviousBookmark({ source: 'previous-button' });
+    });
+    bookmarkPrevButton.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
+    bookmarkAddButton = document.createElement('button');
+    bookmarkAddButton.type = 'button';
+    bookmarkAddButton.className = 'workspace__window-bookmark-add';
+    bookmarkAddButton.textContent = 'このページを記憶';
+    bookmarkAddButton.addEventListener('click', () => {
+      bringToFront();
+      addBookmark(currentPage);
+    });
+    bookmarkAddButton.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
+    bookmarkNextButton = document.createElement('button');
+    bookmarkNextButton.type = 'button';
+    bookmarkNextButton.className = 'workspace__window-bookmark-next';
+    bookmarkNextButton.textContent = '次のブックマーク';
+    bookmarkNextButton.addEventListener('click', () => {
+      bringToFront();
+      goToNextBookmark({ source: 'next-button' });
+    });
+    bookmarkNextButton.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
+    bookmarksControls.append(
+      bookmarkPrevButton,
+      bookmarkAddButton,
+      bookmarkNextButton,
+    );
+
+    bookmarksHeader.append(bookmarksLabel, bookmarksControls);
+
+    bookmarkStatus = document.createElement('p');
+    bookmarkStatus.className = 'workspace__window-bookmarks-status';
+    bookmarkStatus.hidden = true;
+
+    bookmarksEmpty = document.createElement('p');
+    bookmarksEmpty.className = 'workspace__window-bookmarks-empty';
+    bookmarksEmpty.textContent = 'ブックマークはまだありません。';
+
+    bookmarksList = document.createElement('ul');
+    bookmarksList.className = 'workspace__window-bookmarks-list';
+    bookmarksList.setAttribute('role', 'list');
+
+    bookmarksSection.append(bookmarksHeader, bookmarkStatus, bookmarksEmpty, bookmarksList);
 
     const notesSection = document.createElement('section');
     notesSection.className = 'workspace__window-notes';
@@ -2127,8 +2595,10 @@ function createWindowCanvas() {
       adjustmentsGroup,
     );
 
-    body.append(toolbar, viewer.element, notesSection);
+    body.append(toolbar, viewer.element, bookmarksSection, notesSection);
 
+    clampBookmarksToBounds();
+    syncBookmarksDisplay();
     syncNavigationState();
     syncZoomState();
     syncNotesDisplay();
@@ -2141,6 +2611,7 @@ function createWindowCanvas() {
           totalPages = documentInstance.numPages;
         }
 
+        clampBookmarksToBounds();
         clampHistoryToBounds();
         currentPage = clampPage(currentPage);
         syncNavigationState();
@@ -2243,6 +2714,25 @@ function createWindowCanvas() {
       if (!hasModifier && (event.key === '-' || event.key === '_')) {
         event.preventDefault();
         stepZoom(-WINDOW_ZOOM_STEP);
+        return;
+      }
+
+      if (!hasModifier && (event.key === 'b' || event.key === 'B')) {
+        event.preventDefault();
+        bringToFront();
+        addBookmark(currentPage);
+        return;
+      }
+
+      if (!hasModifier && (event.key === '.' || event.key === '>')) {
+        event.preventDefault();
+        goToNextBookmark({ source: 'keyboard-next' });
+        return;
+      }
+
+      if (!hasModifier && (event.key === ',' || event.key === '<')) {
+        event.preventDefault();
+        goToPreviousBookmark({ source: 'keyboard-previous' });
         return;
       }
 

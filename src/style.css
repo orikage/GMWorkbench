@@ -742,6 +742,178 @@ body {
   color: rgba(18, 20, 23, 0.9);
 }
 
+.workspace__window-bookmarks {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(244, 245, 247, 0.12);
+  background: rgba(244, 245, 247, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workspace__window-bookmarks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.workspace__window-bookmarks-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(244, 245, 247, 0.92);
+}
+
+.workspace__window-bookmarks-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.workspace__window-bookmark-add {
+  border-radius: 10px;
+  border: 1px solid rgba(244, 245, 247, 0.18);
+  background: rgba(244, 245, 247, 0.08);
+  color: rgba(244, 245, 247, 0.92);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.workspace__window-bookmark-add:focus,
+.workspace__window-bookmark-add:hover {
+  outline: none;
+  background: rgba(244, 245, 247, 0.18);
+  border-color: rgba(244, 245, 247, 0.35);
+  transform: translateY(-1px);
+}
+
+.workspace__window-bookmark-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  background: rgba(244, 245, 247, 0.04);
+  border-color: rgba(244, 245, 247, 0.12);
+  transform: none;
+}
+
+.workspace__window-bookmark-prev,
+.workspace__window-bookmark-next {
+  border-radius: 10px;
+  border: 1px solid rgba(244, 245, 247, 0.16);
+  background: rgba(244, 245, 247, 0.04);
+  color: rgba(244, 245, 247, 0.85);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.workspace__window-bookmark-prev:focus,
+.workspace__window-bookmark-prev:hover,
+.workspace__window-bookmark-next:focus,
+.workspace__window-bookmark-next:hover {
+  outline: none;
+  background: rgba(244, 245, 247, 0.12);
+  border-color: rgba(244, 245, 247, 0.3);
+  transform: translateY(-1px);
+}
+
+.workspace__window-bookmark-prev:disabled,
+.workspace__window-bookmark-next:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  background: rgba(244, 245, 247, 0.04);
+  border-color: rgba(244, 245, 247, 0.12);
+  transform: none;
+}
+
+.workspace__window-bookmarks-status {
+  font-size: 0.75rem;
+  color: rgba(244, 245, 247, 0.6);
+  margin: 0;
+}
+
+.workspace__window-bookmarks-status--error {
+  color: rgba(255, 148, 148, 0.9);
+}
+
+.workspace__window-bookmarks-empty {
+  font-size: 0.8rem;
+  color: rgba(244, 245, 247, 0.5);
+  margin: 0;
+}
+
+.workspace__window-bookmarks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workspace__window-bookmarks-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(244, 245, 247, 0.12);
+  background: rgba(244, 245, 247, 0.05);
+}
+
+.workspace__window-bookmark-jump {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: rgba(244, 245, 247, 0.92);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.workspace__window-bookmark-jump:focus,
+.workspace__window-bookmark-jump:hover {
+  outline: none;
+  color: rgba(244, 245, 247, 1);
+}
+
+.workspace__window-bookmark-remove {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 148, 148, 0.25);
+  background: rgba(255, 148, 148, 0.12);
+  color: rgba(255, 210, 210, 0.92);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.workspace__window-bookmark-remove:focus,
+.workspace__window-bookmark-remove:hover {
+  outline: none;
+  background: rgba(255, 148, 148, 0.24);
+  border-color: rgba(255, 148, 148, 0.45);
+  transform: translateY(-1px);
+}
+
+.workspace__window-bookmark-remove:active {
+  transform: translateY(0);
+}
+
 .workspace__window-notes {
   margin-top: 20px;
   padding: 16px;

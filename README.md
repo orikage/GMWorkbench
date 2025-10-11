@@ -62,6 +62,8 @@ pnpm docs:print:decisions
 - `workspace:window-notes-change` — ウィンドウ内のメモが更新されたとき。`detail.notes` に最新テキストを含む。
 - `workspace:window-title-change` — ウィンドウタイトルが保存されたとき。`detail.title` に確定したタイトルを含む。
 - `workspace:window-color-change` — ウィンドウの色タグを切り替えたとき。`detail.color` に現在の色 ID を含む。
+- `workspace:window-bookmarks-change` — ブックマークを追加・削除したとき。`detail.action` (`add` / `remove`)、`page`、`bookmarks` 配列を通知します。
+- `workspace:window-bookmark-jump` — ブックマーク一覧やショートカットでページへ移動したとき。`detail.page`、`source`、`bookmarks`、次・前のブックマーク番号 (`next` / `previous`) を含みます。
 - `workspace:cache-cleared` — メンテナンス操作で保存済みデータを削除したとき。`detail.windowsCleared` に閉じたウィンドウ件数が入ります。
 
 ## PDFビューア統合
@@ -91,6 +93,15 @@ pnpm docs:print:decisions
 - 各ウィンドウ下部にメモ欄を配置し、シーンの補足やアドリブ案をすぐに書き留められます。
 - 入力内容は `workspace:window-notes-change` で通知され、`data-notes-length` 属性から文字数を取得できます。
 - 内容は永続化対象に含まれるため、ページやズームと同様にリロード後も維持されます。
+
+## ウィンドウブックマーク
+
+- ツールバーの「このページを記憶」ボタンと一覧から重要なページを素早く蓄積できます。
+- ブックマークは `workspace:window-bookmarks-change` で通知され、`data-bookmark-count` と `data-bookmark-pages` から最新の件数と一覧を参照できます。
+- 重複登録を避けつつ最大 50 件まで保持し、複製・復元でも保存内容が引き継がれます。
+- `b` キーでのショートカットにも対応し、フォーカス中のウィンドウから現在ページを即座に登録できます。
+- 前後ナビゲーションボタンで現在ページから最も近いブックマークへ移動でき、`data-bookmark-next` と `data-bookmark-previous` に直近の番号が公開されます。
+- ブックマークジャンプ時には `workspace:window-bookmark-jump` が発火し、イベント詳細から遷移元・先の状態を取得できます。
 
 ## ウィンドウタイトル編集
 
@@ -150,6 +161,9 @@ pnpm docs:print:decisions
 | 前のページ | `←` | 入力フォームをフォーカスしている場合は無効化されます。 |
 | 最後のページ | `End` | フォーカス中のウィンドウで総ページ数が判明しているときにジャンプします。 |
 | 最初のページ | `Home` | フォーカス中のウィンドウでページ履歴を維持したまま 1 ページ目に戻ります。 |
+| 現在のページをブックマーク | `b` | フォーカス中のウィンドウで現在ページを記憶します。入力欄をフォーカスしている場合は無視されます。 |
+| 次のブックマークへ移動 | `.` | 現在ページより後ろに保存されたブックマークへ移動します。 |
+| 前のブックマークへ移動 | `,` | 現在ページより前に保存されたブックマークへ移動します。 |
 | ズームイン | `=` または `+` | 修飾キー付き（Ctrl/⌘ など）の操作はブラウザに委ねます。 |
 | ズームアウト | `-` または `_` | ズーム下限 (`50%`) を下回らないよう制御されます。 |
 | ズームリセット | `0` | デフォルト倍率 (`100%`) に戻します。 |

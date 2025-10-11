@@ -2,6 +2,7 @@ const DATABASE_NAME = 'gmworkbench';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'workspace-windows';
 const MAX_STORED_HISTORY = 50;
+const MAX_STORED_BOOKMARKS = 50;
 const ROTATION_STEP = 90;
 
 const memoryStore = new Map();
@@ -168,6 +169,30 @@ function normalizeForStorage(state) {
     normalized.color = state.color;
   }
 
+  if (Array.isArray(state.bookmarks) && state.bookmarks.length > 0) {
+    const sanitized = state.bookmarks
+      .map((value) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : null))
+      .filter((value) => Number.isFinite(value));
+
+    if (sanitized.length > 0) {
+      const deduped = [];
+
+      sanitized
+        .sort((a, b) => a - b)
+        .forEach((value) => {
+          if (!deduped.includes(value)) {
+            deduped.push(value);
+          }
+        });
+
+      if (deduped.length > MAX_STORED_BOOKMARKS) {
+        normalized.bookmarks = deduped.slice(-MAX_STORED_BOOKMARKS);
+      } else {
+        normalized.bookmarks = deduped;
+      }
+    }
+  }
+
   let history = [];
   let trimmedOffset = 0;
 
@@ -289,6 +314,14 @@ function normalizeFromStorage(record) {
     historyIndex = history.length - 1;
   }
 
+  const bookmarks = Array.isArray(record.bookmarks)
+    ? record.bookmarks
+        .map((value) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : null))
+        .filter((value, index, array) => Number.isFinite(value) && array.indexOf(value) === index)
+        .sort((a, b) => a - b)
+        .slice(-MAX_STORED_BOOKMARKS)
+    : [];
+
   return {
     id: record.id,
     file,
@@ -318,6 +351,7 @@ function normalizeFromStorage(record) {
     color: typeof record.color === 'string' ? record.color : undefined,
     pageHistory: history.length > 0 ? history : undefined,
     pageHistoryIndex: Number.isFinite(historyIndex) ? historyIndex : undefined,
+    bookmarks: bookmarks.length > 0 ? bookmarks : undefined,
     persisted: true,
   };
 }

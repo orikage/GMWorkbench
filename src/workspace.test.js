@@ -208,6 +208,7 @@ describe('createWorkspace', () => {
         notes: '復元メモ',
         title: '永続ウィンドウ',
         color: 'emerald',
+        bookmarks: [2, 5],
       },
     ]);
 
@@ -248,11 +249,21 @@ describe('createWorkspace', () => {
     expect(notesCounter?.textContent).toBe(`${'復元メモ'.length}文字`);
     expect(windowElement?.dataset.notesLength).toBe(String('復元メモ'.length));
     expect(windowElement?.dataset.windowMaximized).toBe('false');
+    expect(windowElement?.dataset.bookmarkCount).toBe('2');
+    expect(windowElement?.dataset.bookmarkPages).toBe('2,4');
     expect(maximizeButton?.getAttribute('aria-pressed')).toBe('false');
     expect(resizeHandle?.disabled).toBe(false);
 
     const activeWindow = workspace.querySelector('.workspace__window--active');
     expect(activeWindow).toBe(windowElement);
+
+    const bookmarkItems = workspace.querySelectorAll('.workspace__window-bookmarks-item');
+    const bookmarkAddButton = workspace.querySelector('.workspace__window-bookmark-add');
+
+    expect(bookmarkItems).toHaveLength(2);
+    expect(bookmarkItems[0]?.textContent).toContain('2ページ目');
+    expect(bookmarkItems[1]?.textContent).toContain('4ページ目');
+    expect(bookmarkAddButton?.disabled).toBe(true);
   });
 
   it('restores maximized windows and disables manual layout controls', async () => {
@@ -873,6 +884,7 @@ describe('createWorkspace', () => {
     const renameButton = windowElement.querySelector('.workspace__window-rename');
     const titleInput = windowElement.querySelector('.workspace__window-title-input');
     const titleLabel = windowElement.querySelector('.workspace__window-title');
+    const bookmarkAddButton = windowElement.querySelector('.workspace__window-bookmark-add');
 
     if (
       !pageInput ||
@@ -886,7 +898,8 @@ describe('createWorkspace', () => {
       !titleLabel ||
       !rotateLeftButton ||
       !rotateRightButton ||
-      !rotateResetButton
+      !rotateResetButton ||
+      !(bookmarkAddButton instanceof HTMLButtonElement)
     ) {
       throw new Error('duplicate control structure is incomplete');
     }
@@ -906,6 +919,22 @@ describe('createWorkspace', () => {
 
     notesInput.value = '魔王城の罠メモ';
     notesInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushPromises();
+
+    bookmarkAddButton.click();
+    await flushPromises();
+
+    pageInput.value = '5';
+    pageInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushPromises();
+
+    bookmarkAddButton.click();
+    await flushPromises();
+
+    expect(windowElement.dataset.bookmarkPages).toBe('3,5');
+
+    pageInput.value = '3';
+    pageInput.dispatchEvent(new Event('change', { bubbles: true }));
     await flushPromises();
 
     renameButton.click();
@@ -955,6 +984,10 @@ describe('createWorkspace', () => {
     expect(duplicateWindow?.dataset.windowColor).toBe('emerald');
     expect(duplicateWindow?.dataset.rotation).toBe('270');
     expect(duplicateWindow?.dataset.windowMaximized).toBe('false');
+    expect(duplicateWindow?.dataset.bookmarkPages).toBe(
+      originalWindow.dataset.bookmarkPages,
+    );
+    expect(duplicateWindow?.dataset.bookmarkCount).toBe('2');
     expect(titleLabel.textContent).toBe('魔王討伐計画');
     expect(duplicateTitle?.textContent).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.pageHistoryLength).toBe(
@@ -988,6 +1021,7 @@ describe('createWorkspace', () => {
     expect(detail.title).toBe('魔王討伐計画');
     expect(detail.color).toBe('emerald');
     expect(detail.maximized).toBe(false);
+    expect(detail.bookmarks).toEqual([3, 5]);
   });
 
   it('toggles window maximization, emits events, and persists restore bounds', async () => {
@@ -1056,6 +1090,7 @@ describe('createWorkspace', () => {
     expect(firstPersist[0].restoreTop).toBeCloseTo(initialTop, 6);
     expect(firstPersist[0].restoreWidth).toBeCloseTo(initialWidth, 6);
     expect(firstPersist[0].restoreHeight).toBeCloseTo(initialHeight, 6);
+    expect(firstPersist[0].bookmarks).toEqual([]);
 
     storageMocks.persist.mockClear();
     maximizeHandler.mockClear();
@@ -1100,6 +1135,7 @@ describe('createWorkspace', () => {
     expect(secondPersist[0].restoreTop).toBeCloseTo(initialTop, 6);
     expect(secondPersist[0].restoreWidth).toBeCloseTo(initialWidth, 6);
     expect(secondPersist[0].restoreHeight).toBeCloseTo(initialHeight, 6);
+    expect(secondPersist[0].bookmarks).toEqual([]);
   });
 
   it('renames windows, updates metadata, and persists the new title', async () => {
@@ -1227,6 +1263,7 @@ describe('createWorkspace', () => {
     expect(renamePersist[0].title).toBe('遭遇表');
     expect(renamePersist[0].color).toBe('neutral');
     expect(renamePersist[0].rotation).toBe(0);
+    expect(renamePersist[0].bookmarks).toEqual([]);
 
     renameButton.click();
     await flushPromises();
@@ -1288,6 +1325,331 @@ describe('createWorkspace', () => {
     const [state] = lastCall;
     expect(state.notes).toBe('敵NPCの口調を変更する');
     expect(state.color).toBe('neutral');
+    expect(state.bookmarks).toEqual([]);
+  });
+
+  it('manages bookmarks via the toolbar, emits events, and persists updates', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['bookmark'], 'bookmark.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file, { totalPages: 8 });
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const bookmarkAddButton = workspace.querySelector('.workspace__window-bookmark-add');
+    const bookmarkPrevButton = workspace.querySelector('.workspace__window-bookmark-prev');
+    const bookmarkNextButton = workspace.querySelector('.workspace__window-bookmark-next');
+    const bookmarksList = workspace.querySelector('.workspace__window-bookmarks-list');
+    const bookmarksEmpty = workspace.querySelector('.workspace__window-bookmarks-empty');
+    const bookmarkStatus = workspace.querySelector('.workspace__window-bookmarks-status');
+    const pageForm = workspace.querySelector('.workspace__window-page');
+    const pageInput = workspace.querySelector('.workspace__window-page-input');
+
+    if (
+      !windowElement ||
+      !(bookmarkAddButton instanceof HTMLButtonElement) ||
+      !(bookmarkPrevButton instanceof HTMLButtonElement) ||
+      !(bookmarkNextButton instanceof HTMLButtonElement) ||
+      !(bookmarksList instanceof HTMLElement) ||
+      !(bookmarksEmpty instanceof HTMLElement) ||
+      !(bookmarkStatus instanceof HTMLElement) ||
+      !pageForm ||
+      !(pageInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('bookmark controls must exist for the test');
+    }
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-bookmarks-change', handler);
+
+    storageMocks.persist.mockClear();
+
+    expect(windowElement.dataset.bookmarkCount).toBe('0');
+    expect(bookmarkAddButton.disabled).toBe(false);
+    expect(bookmarkPrevButton.disabled).toBe(true);
+    expect(bookmarkNextButton.disabled).toBe(true);
+    expect(windowElement.dataset.bookmarkPrevious).toBeUndefined();
+    expect(windowElement.dataset.bookmarkNext).toBeUndefined();
+    expect(bookmarksEmpty.hidden).toBe(false);
+
+    bookmarkAddButton.click();
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const firstDetail = handler.mock.calls[0][0].detail;
+    expect(firstDetail.action).toBe('add');
+    expect(firstDetail.page).toBe(1);
+    expect(firstDetail.bookmarks).toEqual([1]);
+    expect(windowElement.dataset.bookmarkCount).toBe('1');
+    expect(windowElement.dataset.bookmarkPages).toBe('1');
+    expect(bookmarkAddButton.disabled).toBe(true);
+    expect(bookmarkPrevButton.disabled).toBe(true);
+    expect(bookmarkNextButton.disabled).toBe(true);
+    expect(windowElement.dataset.bookmarkPrevious).toBeUndefined();
+    expect(windowElement.dataset.bookmarkNext).toBeUndefined();
+    expect(bookmarksEmpty.hidden).toBe(true);
+    expect(bookmarkStatus.textContent).toBe('1ページ目を保存しました。');
+    expect(bookmarkStatus.hidden).toBe(false);
+
+    const firstItem = bookmarksList.querySelector('[data-bookmark-page="1"]');
+    expect(firstItem).not.toBeNull();
+
+    pageInput.value = '3';
+    pageForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    expect(bookmarkAddButton.disabled).toBe(false);
+    expect(bookmarkPrevButton.disabled).toBe(false);
+    expect(bookmarkNextButton.disabled).toBe(true);
+    expect(windowElement.dataset.bookmarkPrevious).toBe('1');
+    expect(windowElement.dataset.bookmarkNext).toBeUndefined();
+
+    bookmarkAddButton.click();
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    const secondDetail = handler.mock.calls[1][0].detail;
+    expect(secondDetail.action).toBe('add');
+    expect(secondDetail.page).toBe(3);
+    expect(secondDetail.bookmarks).toEqual([1, 3]);
+    expect(windowElement.dataset.bookmarkCount).toBe('2');
+    expect(windowElement.dataset.bookmarkPages).toBe('1,3');
+    expect(bookmarkPrevButton.disabled).toBe(false);
+    expect(bookmarkNextButton.disabled).toBe(true);
+    expect(windowElement.dataset.bookmarkPrevious).toBe('1');
+    expect(windowElement.dataset.bookmarkNext).toBeUndefined();
+
+    const removeFirst = bookmarksList.querySelector(
+      '[data-bookmark-page="1"] .workspace__window-bookmark-remove',
+    );
+
+    if (!(removeFirst instanceof HTMLButtonElement)) {
+      throw new Error('bookmark remove control must exist');
+    }
+
+    storageMocks.persist.mockClear();
+    removeFirst.click();
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(3);
+    const thirdDetail = handler.mock.calls[2][0].detail;
+    expect(thirdDetail.action).toBe('remove');
+    expect(thirdDetail.page).toBe(1);
+    expect(thirdDetail.bookmarks).toEqual([3]);
+    expect(windowElement.dataset.bookmarkCount).toBe('1');
+    expect(windowElement.dataset.bookmarkPages).toBe('3');
+    expect(bookmarkPrevButton.disabled).toBe(true);
+    expect(bookmarkNextButton.disabled).toBe(true);
+    expect(windowElement.dataset.bookmarkPrevious).toBeUndefined();
+    expect(windowElement.dataset.bookmarkNext).toBeUndefined();
+
+    const lastPersist =
+      storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
+
+    if (!lastPersist) {
+      throw new Error('bookmark persistence call is required');
+    }
+
+    const [state] = lastPersist;
+    expect(state.bookmarks).toEqual([3]);
+
+    bookmarkAddButton.click();
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(3);
+
+    const removeRemaining = bookmarksList.querySelector(
+      '[data-bookmark-page="3"] .workspace__window-bookmark-remove',
+    );
+
+    if (!(removeRemaining instanceof HTMLButtonElement)) {
+      throw new Error('bookmark removal control must exist');
+    }
+
+    removeRemaining.click();
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(4);
+    const finalDetail = handler.mock.calls[3][0].detail;
+    expect(finalDetail.action).toBe('remove');
+    expect(finalDetail.bookmarks).toEqual([]);
+    expect(windowElement.dataset.bookmarkCount).toBe('0');
+    expect(windowElement.dataset.bookmarkPages).toBeUndefined();
+    expect(bookmarkAddButton.disabled).toBe(false);
+    expect(bookmarkPrevButton.disabled).toBe(true);
+    expect(bookmarkNextButton.disabled).toBe(true);
+    expect(windowElement.dataset.bookmarkPrevious).toBeUndefined();
+    expect(windowElement.dataset.bookmarkNext).toBeUndefined();
+    expect(bookmarksEmpty.hidden).toBe(false);
+    expect(bookmarkStatus.textContent).toBe('ブックマークはすべて削除されました。');
+  });
+
+  it('navigates bookmarks via toolbar buttons and keyboard shortcuts', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['bookmark-nav'], 'bookmark-nav.pdf', {
+      type: 'application/pdf',
+    });
+
+    await openWindow(workspace, file, { totalPages: 9 });
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const viewer = workspace.querySelector('.workspace__window-viewer');
+    const bookmarkAddButton = workspace.querySelector('.workspace__window-bookmark-add');
+    const bookmarkPrevButton = workspace.querySelector('.workspace__window-bookmark-prev');
+    const bookmarkNextButton = workspace.querySelector('.workspace__window-bookmark-next');
+    const bookmarkStatus = workspace.querySelector('.workspace__window-bookmarks-status');
+    const pageForm = workspace.querySelector('.workspace__window-page');
+    const pageInput = workspace.querySelector('.workspace__window-page-input');
+
+    if (
+      !windowElement ||
+      !(viewer instanceof HTMLElement) ||
+      !(bookmarkAddButton instanceof HTMLButtonElement) ||
+      !(bookmarkPrevButton instanceof HTMLButtonElement) ||
+      !(bookmarkNextButton instanceof HTMLButtonElement) ||
+      !(bookmarkStatus instanceof HTMLElement) ||
+      !pageForm ||
+      !(pageInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('bookmark navigation controls must exist for the test');
+    }
+
+    const jumpHandler = vi.fn();
+    workspace.addEventListener('workspace:window-bookmark-jump', jumpHandler);
+
+    const setPage = async (page) => {
+      pageInput.value = String(page);
+      pageForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushPromises();
+    };
+
+    await setPage(2);
+    bookmarkAddButton.click();
+    await flushPromises();
+
+    await setPage(5);
+    bookmarkAddButton.click();
+    await flushPromises();
+
+    await setPage(8);
+    bookmarkAddButton.click();
+    await flushPromises();
+
+    await setPage(5);
+
+    expect(bookmarkPrevButton.disabled).toBe(false);
+    expect(bookmarkNextButton.disabled).toBe(false);
+    expect(windowElement.dataset.bookmarkPrevious).toBe('2');
+    expect(windowElement.dataset.bookmarkNext).toBe('8');
+
+    bookmarkNextButton.click();
+    await flushPromises();
+
+    expect(jumpHandler).toHaveBeenCalledTimes(1);
+    const nextDetail = jumpHandler.mock.calls[0][0].detail;
+    expect(nextDetail.page).toBe(8);
+    expect(nextDetail.source).toBe('next-button');
+    expect(nextDetail.previous).toBe(5);
+    expect(nextDetail.next).toBeNull();
+    expect(viewer.dataset.page).toBe('8');
+    expect(bookmarkPrevButton.disabled).toBe(false);
+    expect(bookmarkNextButton.disabled).toBe(true);
+    expect(windowElement.dataset.bookmarkPrevious).toBe('5');
+    expect(windowElement.dataset.bookmarkNext).toBeUndefined();
+
+    windowElement.focus();
+    windowElement.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '.', bubbles: true, cancelable: true }),
+    );
+    await flushPromises();
+
+    expect(jumpHandler).toHaveBeenCalledTimes(1);
+    expect(bookmarkStatus.textContent).toBe('後ろのブックマークはありません。');
+    expect(bookmarkStatus.classList.contains('workspace__window-bookmarks-status--error')).toBe(
+      true,
+    );
+
+    windowElement.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ',', bubbles: true, cancelable: true }),
+    );
+    await flushPromises();
+
+    expect(jumpHandler).toHaveBeenCalledTimes(2);
+    const previousDetail = jumpHandler.mock.calls[1][0].detail;
+    expect(previousDetail.page).toBe(5);
+    expect(previousDetail.source).toBe('keyboard-previous');
+    expect(previousDetail.previous).toBe(2);
+    expect(previousDetail.next).toBe(8);
+    expect(viewer.dataset.page).toBe('5');
+    expect(bookmarkPrevButton.disabled).toBe(false);
+    expect(bookmarkNextButton.disabled).toBe(false);
+    expect(windowElement.dataset.bookmarkPrevious).toBe('2');
+    expect(windowElement.dataset.bookmarkNext).toBe('8');
+    expect(bookmarkStatus.textContent).toBe('5ページ目へ移動しました。');
+    expect(
+      bookmarkStatus.classList.contains('workspace__window-bookmarks-status--error'),
+    ).toBe(false);
+
+    windowElement.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '.', bubbles: true, cancelable: true }),
+    );
+    await flushPromises();
+
+    expect(jumpHandler).toHaveBeenCalledTimes(3);
+    const keyboardNextDetail = jumpHandler.mock.calls[2][0].detail;
+    expect(keyboardNextDetail.page).toBe(8);
+    expect(keyboardNextDetail.source).toBe('keyboard-next');
+    expect(keyboardNextDetail.previous).toBe(5);
+    expect(keyboardNextDetail.next).toBeNull();
+    expect(viewer.dataset.page).toBe('8');
+
+    bookmarkPrevButton.click();
+    await flushPromises();
+
+    expect(jumpHandler).toHaveBeenCalledTimes(4);
+    const buttonPrevDetail = jumpHandler.mock.calls[3][0].detail;
+    expect(buttonPrevDetail.page).toBe(5);
+    expect(buttonPrevDetail.source).toBe('previous-button');
+    expect(buttonPrevDetail.previous).toBe(2);
+    expect(buttonPrevDetail.next).toBe(8);
+    expect(windowElement.dataset.bookmarkPrevious).toBe('2');
+    expect(windowElement.dataset.bookmarkNext).toBe('8');
+
+    bookmarkPrevButton.click();
+    await flushPromises();
+
+    expect(jumpHandler).toHaveBeenCalledTimes(5);
+    const toFirstDetail = jumpHandler.mock.calls[4][0].detail;
+    expect(toFirstDetail.page).toBe(2);
+    expect(toFirstDetail.previous).toBeNull();
+    expect(toFirstDetail.next).toBe(5);
+    expect(viewer.dataset.page).toBe('2');
+    expect(bookmarkPrevButton.disabled).toBe(true);
+    expect(bookmarkNextButton.disabled).toBe(false);
+    expect(windowElement.dataset.bookmarkPrevious).toBeUndefined();
+    expect(windowElement.dataset.bookmarkNext).toBe('5');
+
+    windowElement.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ',', bubbles: true, cancelable: true }),
+    );
+    await flushPromises();
+
+    expect(jumpHandler).toHaveBeenCalledTimes(5);
+    expect(bookmarkStatus.textContent).toBe('前のブックマークはありません。');
+    expect(bookmarkStatus.classList.contains('workspace__window-bookmarks-status--error')).toBe(
+      true,
+    );
+
+    windowElement.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '.', bubbles: true, cancelable: true }),
+    );
+    await flushPromises();
+
+    expect(jumpHandler).toHaveBeenCalledTimes(6);
+    const wrapForwardDetail = jumpHandler.mock.calls[5][0].detail;
+    expect(wrapForwardDetail.page).toBe(5);
+    expect(wrapForwardDetail.previous).toBe(2);
+    expect(wrapForwardDetail.next).toBe(8);
+    expect(viewer.dataset.page).toBe('5');
   });
 
   it('cycles window colors, emits change events, and persists selection', async () => {
@@ -1340,6 +1702,7 @@ describe('createWorkspace', () => {
 
     const [state] = lastCall;
     expect(state.color).toBe('emerald');
+    expect(state.bookmarks).toEqual([]);
   });
 
   it('changes window pages through the navigation controls and emits updates', async () => {
@@ -1440,6 +1803,7 @@ describe('createWorkspace', () => {
     expect(state.pageHistory).toEqual([1, 2, 5, 4]);
     expect(state.pageHistoryIndex).toBe(3);
     expect(state.color).toBe('neutral');
+    expect(state.bookmarks).toEqual([]);
   });
 
   it('jumps directly to the first or last page from toolbar controls', async () => {
@@ -1647,6 +2011,7 @@ describe('createWorkspace', () => {
     expect(state.pageHistory).toEqual([1, 2, 9]);
     expect(state.pageHistoryIndex).toBe(2);
     expect(state.color).toBe('neutral');
+    expect(state.bookmarks).toEqual([]);
   });
 
   it('supports keyboard page navigation when the window is focused', async () => {
@@ -1719,6 +2084,50 @@ describe('createWorkspace', () => {
     pageInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
 
     expect(handler).toHaveBeenCalledTimes(4);
+  });
+
+  it('adds bookmarks via the keyboard shortcut when the window is focused', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['shortcut'], 'shortcut.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file, { totalPages: 4 });
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const bookmarkAddButton = workspace.querySelector('.workspace__window-bookmark-add');
+    const bookmarksList = workspace.querySelector('.workspace__window-bookmarks-list');
+    const notesInput = workspace.querySelector('.workspace__window-notes-input');
+
+    if (
+      !windowElement ||
+      !(bookmarkAddButton instanceof HTMLButtonElement) ||
+      !(bookmarksList instanceof HTMLElement)
+    ) {
+      throw new Error('bookmark shortcut structure is required');
+    }
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-bookmarks-change', handler);
+
+    windowElement.focus();
+    windowElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const detail = handler.mock.calls[0][0].detail;
+    expect(detail.action).toBe('add');
+    expect(detail.page).toBe(1);
+    expect(detail.bookmarks).toEqual([1]);
+    expect(windowElement.dataset.bookmarkCount).toBe('1');
+    expect(bookmarkAddButton.disabled).toBe(true);
+    expect(bookmarksList.querySelector('[data-bookmark-page="1"]')).not.toBeNull();
+
+    if (notesInput instanceof HTMLTextAreaElement) {
+      notesInput.focus();
+      notesInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
+      await flushPromises();
+    }
+
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 
   it('supports keyboard zoom shortcuts when the window is focused', async () => {
@@ -2295,6 +2704,7 @@ describe('createWorkspace', () => {
     }
 
     expect(lastPersist[0].rotation).toBe(0);
+    expect(lastPersist[0].bookmarks).toEqual([]);
   });
 
   it('closes windows and emits a closure event', async () => {
