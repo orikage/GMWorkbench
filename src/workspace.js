@@ -483,6 +483,7 @@ function createWindowCanvas() {
 
     currentPage = pageHistory[pageHistoryIndex] ?? currentPage;
     let pageInput;
+    let pageSlider;
     let firstPageButton;
     let prevButton;
     let nextButton;
@@ -1010,6 +1011,19 @@ function createWindowCanvas() {
 
       if (historyForwardButton) {
         historyForwardButton.disabled = !canStepHistoryForward();
+      }
+
+      if (pageSlider) {
+        pageSlider.value = String(currentPage);
+
+        if (Number.isFinite(totalPages)) {
+          const sliderMax = Math.max(1, Math.floor(totalPages));
+          pageSlider.max = String(sliderMax);
+          pageSlider.disabled = sliderMax <= 1;
+        } else {
+          pageSlider.removeAttribute('max');
+          pageSlider.disabled = true;
+        }
       }
 
       windowElement.dataset.pageHistoryIndex = String(pageHistoryIndex);
@@ -1970,6 +1984,27 @@ function createWindowCanvas() {
 
     pageForm.append(pageLabel, pageInput);
 
+    pageSlider = document.createElement('input');
+    pageSlider.type = 'range';
+    pageSlider.className = 'workspace__window-page-slider';
+    pageSlider.min = '1';
+    pageSlider.step = '1';
+    pageSlider.value = String(currentPage);
+    pageSlider.setAttribute('aria-label', 'ページスライダー');
+    pageSlider.addEventListener('focus', () => {
+      bringToFront();
+    });
+    pageSlider.addEventListener('input', () => {
+      const parsed = Number.parseInt(pageSlider.value, 10);
+
+      if (!Number.isFinite(parsed)) {
+        syncNavigationState();
+        return;
+      }
+
+      commitPageChange(parsed);
+    });
+
     const rotationGroup = document.createElement('div');
     rotationGroup.className = 'workspace__window-rotation';
 
@@ -2085,6 +2120,7 @@ function createWindowCanvas() {
       historyBackButton,
       prevButton,
       pageForm,
+      pageSlider,
       nextButton,
       historyForwardButton,
       lastPageButton,

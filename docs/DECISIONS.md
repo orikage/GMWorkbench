@@ -19,6 +19,7 @@
 - [2025-10-11: ページ履歴ナビゲーションの導入方針](decisions/2025-10-11-window-page-history.md)
 - [2025-10-11: ウィンドウカラータグとアクセント設計](decisions/2025-10-11-window-color-tags.md)
 - [2025-10-11: ページ端ジャンプ操作の導入](decisions/2025-10-11-window-boundary-navigation.md)
+- [2025-10-11: ページスライダーの導入方針](decisions/2025-10-11-window-page-slider.md)
 - [2025-10-11: ウィンドウ回転コントロールの導入方針](decisions/2025-10-11-window-rotation.md)
 - [2025-10-11: ウィンドウ最大化トグルの導入方針](decisions/2025-10-11-window-maximize.md)
 - [2025-10-11: ズームフィット操作の導入方針](decisions/2025-10-11-window-zoom-fit.md)

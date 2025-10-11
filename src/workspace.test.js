@@ -1493,6 +1493,81 @@ describe('createWorkspace', () => {
     expect(windowElement.dataset.pageHistoryLength).toBe('3');
   });
 
+  it('exposes a page slider that mirrors navigation state', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['slider'], 'slider.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file, { totalPages: 6 });
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const slider = workspace.querySelector('.workspace__window-page-slider');
+    const nextButton = workspace.querySelector('.workspace__window-nav--next');
+
+    if (!windowElement || !(slider instanceof HTMLInputElement) || !nextButton) {
+      throw new Error('page slider controls are required for the test');
+    }
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-page-change', handler);
+
+    expect(slider.disabled).toBe(false);
+    expect(slider.min).toBe('1');
+    expect(slider.max).toBe('6');
+    expect(slider.value).toBe('1');
+
+    slider.value = '4';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].detail.page).toBe(4);
+    expect(handler.mock.calls[0][0].detail.totalPages).toBe(6);
+    expect(slider.value).toBe('4');
+    expect(windowElement.dataset.pageHistoryIndex).toBe('1');
+    expect(windowElement.dataset.pageHistoryLength).toBe('2');
+
+    nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler.mock.calls[1][0].detail.page).toBe(5);
+    expect(slider.value).toBe('5');
+    expect(windowElement.dataset.pageHistoryIndex).toBe('2');
+    expect(windowElement.dataset.pageHistoryLength).toBe('3');
+  });
+
+  it('disables the page slider when total pages are unavailable or singular', async () => {
+    const workspace = createWorkspace();
+    pdfMocks.state.numPages = Number.NaN;
+    const file = new File(['unknown'], 'unknown.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+
+    const slider = workspace.querySelector('.workspace__window-page-slider');
+
+    if (!(slider instanceof HTMLInputElement)) {
+      throw new Error('page slider element is required for the test');
+    }
+
+    expect(slider.disabled).toBe(true);
+    expect(slider.hasAttribute('max')).toBe(false);
+
+    const singlePageWorkspace = createWorkspace();
+    const singleFile = new File(['single'], 'single.pdf', { type: 'application/pdf' });
+
+    await openWindow(singlePageWorkspace, singleFile, { totalPages: 1 });
+
+    const singleSlider = singlePageWorkspace.querySelector(
+      '.workspace__window-page-slider',
+    );
+
+    if (!(singleSlider instanceof HTMLInputElement)) {
+      throw new Error('single page slider element is required for the test');
+    }
+
+    expect(singleSlider.disabled).toBe(true);
+    expect(singleSlider.max).toBe('1');
+    expect(singleSlider.value).toBe('1');
+  });
+
   it('navigates page history backward, forward, and trims stale entries', async () => {
     const workspace = createWorkspace();
     const file = new File(['history'], 'history.pdf', { type: 'application/pdf' });
