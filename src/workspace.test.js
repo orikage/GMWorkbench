@@ -1,5 +1,124 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const pdfMocks = vi.hoisted(() => {
+  const state = { numPages: 4 };
+  const renderMock = vi.fn();
+  const getPageMock = vi.fn();
+  const destroyMock = vi.fn();
+  const getDocumentMock = vi.fn();
+
+  return {
+    state,
+    renderMock,
+    getPageMock,
+    destroyMock,
+    getDocumentMock,
+  };
+});
+
+const storageMocks = vi.hoisted(() => {
+  const load = vi.fn();
+  const persist = vi.fn();
+  const remove = vi.fn();
+
+  return {
+    load,
+    persist,
+    remove,
+  };
+});
+
+vi.mock('pdfjs-dist', () => ({
+  getDocument: pdfMocks.getDocumentMock,
+  GlobalWorkerOptions: { workerSrc: '' },
+}));
+
+vi.mock(
+  'pdfjs-dist/build/pdf.worker.min.mjs?url',
+  () => ({
+    default: 'worker-url',
+  }),
+  { virtual: true },
+);
+
+vi.mock('./workspace-storage.js', () => ({
+  loadWorkspaceWindows: storageMocks.load,
+  persistWorkspaceWindow: storageMocks.persist,
+  removeWorkspaceWindow: storageMocks.remove,
+}));
+
 import { createWorkspace } from './workspace.js';
+
+const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const openWindow = async (workspace, file, options = {}) => {
+  if (options.totalPages) {
+    pdfMocks.state.numPages = options.totalPages;
+  }
+
+  workspace.dispatchEvent(
+    new CustomEvent('workspace:file-open-request', {
+      bubbles: true,
+      detail: { file },
+    }),
+  );
+
+  await flushPromises();
+  await flushPromises();
+
+  let attempts = 0;
+  while (pdfMocks.getPageMock.mock.calls.length === 0 && attempts < 8) {
+    await flushPromises();
+    attempts += 1;
+  }
+};
+
+beforeEach(() => {
+  pdfMocks.state.numPages = 4;
+  pdfMocks.renderMock.mockReset();
+  pdfMocks.getPageMock.mockReset();
+  pdfMocks.getDocumentMock.mockReset();
+  pdfMocks.destroyMock.mockReset();
+
+  storageMocks.load.mockReset();
+  storageMocks.persist.mockReset();
+  storageMocks.remove.mockReset();
+
+  storageMocks.load.mockResolvedValue([]);
+  storageMocks.persist.mockResolvedValue();
+  storageMocks.remove.mockResolvedValue();
+
+  pdfMocks.renderMock.mockImplementation(() => ({ promise: Promise.resolve() }));
+  pdfMocks.getPageMock.mockImplementation(async () => ({
+    getViewport: ({ scale }) => ({
+      width: 600 * scale,
+      height: 800 * scale,
+    }),
+    render: pdfMocks.renderMock,
+  }));
+  pdfMocks.getDocumentMock.mockImplementation(() => ({
+    promise: Promise.resolve({
+      numPages: pdfMocks.state.numPages,
+      getPage: pdfMocks.getPageMock,
+      destroy: pdfMocks.destroyMock,
+    }),
+  }));
+
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => ({
+      clearRect: vi.fn(),
+      setTransform: vi.fn(),
+    })),
+  });
+});
+
+afterEach(() => {
+  HTMLCanvasElement.prototype.getContext = originalGetContext;
+});
 
 describe('createWorkspace', () => {
   it('creates a workspace container with key sections', () => {
@@ -50,6 +169,56 @@ describe('createWorkspace', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.files).toEqual([file]);
+  });
+
+  it('restores persisted windows with their saved layout and focus', async () => {
+    const persistedFile = new File(['persisted'], 'stored.pdf', {
+      type: 'application/pdf',
+      lastModified: 123,
+    });
+
+    storageMocks.load.mockResolvedValue([
+      {
+        id: 'stored-window',
+        file: persistedFile,
+        page: 2,
+        zoom: 1.25,
+        left: 48,
+        top: 64,
+        width: 512,
+        height: 420,
+        pinned: true,
+        totalPages: 6,
+        openedAt: 10,
+        lastFocusedAt: 20,
+        persisted: true,
+      },
+    ]);
+
+    const workspace = createWorkspace();
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(storageMocks.load).toHaveBeenCalledTimes(1);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+
+    expect(windowElement).not.toBeNull();
+    expect(windowElement?.classList.contains('workspace__window--pinned')).toBe(true);
+    expect(windowElement?.style.left).toBe('48px');
+    expect(windowElement?.style.top).toBe('64px');
+    expect(windowElement?.style.width).toBe('512px');
+    expect(windowElement?.style.height).toBe('420px');
+
+    const pageInput = workspace.querySelector('.workspace__window-page-input');
+    const zoomDisplay = workspace.querySelector('.workspace__window-zoom-display');
+
+    expect(pageInput?.value).toBe('2');
+    expect(zoomDisplay?.textContent).toBe('125%');
+
+    const activeWindow = workspace.querySelector('.workspace__window--active');
+    expect(activeWindow).toBe(windowElement);
   });
 
   it('lists selected files in the intake queue with metadata', () => {
@@ -163,7 +332,7 @@ describe('createWorkspace', () => {
     expect(emptyState.hidden).toBe(false);
   });
 
-  it('opens a window placeholder when an open request is received', () => {
+  it('opens a window viewer when an open request is received', async () => {
     const workspace = createWorkspace();
     const canvas = workspace.querySelector('.workspace__canvas');
 
@@ -180,12 +349,8 @@ describe('createWorkspace', () => {
     expect(emptyState.hidden).toBe(false);
 
     const file = new File(['dummy'], 'window.pdf', { type: 'application/pdf' });
-    const openRequest = new CustomEvent('workspace:file-open-request', {
-      bubbles: true,
-      detail: { file },
-    });
 
-    workspace.dispatchEvent(openRequest);
+    await openWindow(workspace, file);
 
     const windowElement = canvas.querySelector('.workspace__window');
     expect(windowElement).not.toBeNull();
@@ -193,28 +358,26 @@ describe('createWorkspace', () => {
     expect(
       windowElement?.querySelector('.workspace__window-title')?.textContent,
     ).toBe('window.pdf');
+    expect(
+      windowElement?.querySelector('.workspace__window-viewer'),
+    ).not.toBeNull();
   });
 
-  it('exposes placeholder metadata for page and zoom state', () => {
+  it('updates the viewer metadata for page and zoom state', async () => {
     const workspace = createWorkspace();
     const file = new File(['dummy'], 'state.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file, { totalPages: 6 });
 
-    const placeholder = workspace.querySelector('.workspace__window-placeholder');
+    const viewer = workspace.querySelector('.workspace__window-viewer');
 
-    if (!(placeholder instanceof HTMLElement)) {
-      throw new Error('window placeholder element is required for the test');
+    if (!(viewer instanceof HTMLElement)) {
+      throw new Error('window viewer element is required for the test');
     }
 
-    expect(placeholder.dataset.page).toBe('1');
-    expect(placeholder.dataset.zoom).toBe('1');
-    expect(placeholder.textContent).toContain('ページ 1');
+    expect(viewer.dataset.page).toBe('1');
+    expect(viewer.dataset.zoom).toBe('1');
+    expect(viewer.dataset.totalPages).toBe('6');
 
     const pageInput = workspace.querySelector('.workspace__window-page-input');
 
@@ -225,8 +388,9 @@ describe('createWorkspace', () => {
     pageInput.value = '3';
     pageInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-    expect(placeholder.dataset.page).toBe('3');
-    expect(placeholder.textContent).toContain('ページ 3');
+    await flushPromises();
+
+    expect(viewer.dataset.page).toBe('3');
 
     const zoomInButton = workspace.querySelector(
       '.workspace__window-zoom-control--in',
@@ -238,11 +402,12 @@ describe('createWorkspace', () => {
 
     zoomInButton.dispatchEvent(new Event('click', { bubbles: true }));
 
-    expect(placeholder.dataset.zoom).toBe('1.1');
-    expect(placeholder.textContent).toContain('110%');
+    await flushPromises();
+
+    expect(viewer.dataset.zoom).toBe('1.1');
   });
 
-  it('stacks new windows with offsets and updates the active state', () => {
+  it('stacks new windows with offsets and updates the active state', async () => {
     const workspace = createWorkspace();
     const canvas = workspace.querySelector('.workspace__canvas');
 
@@ -253,19 +418,8 @@ describe('createWorkspace', () => {
     const firstFile = new File(['dummy'], 'first.pdf', { type: 'application/pdf' });
     const secondFile = new File(['dummy'], 'second.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file: firstFile },
-      }),
-    );
-
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file: secondFile },
-      }),
-    );
+    await openWindow(workspace, firstFile);
+    await openWindow(workspace, secondFile);
 
     const windows = canvas.querySelectorAll('.workspace__window');
 
@@ -281,17 +435,12 @@ describe('createWorkspace', () => {
     );
   });
 
-  it('allows dragging windows via the header to update position', () => {
+  it('allows dragging windows via the header to update position', async () => {
     const workspace = createWorkspace();
 
     const file = new File(['dummy'], 'drag.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file);
 
     const windowElement = workspace.querySelector('.workspace__window');
     const header = workspace.querySelector('.workspace__window-header');
@@ -328,19 +477,14 @@ describe('createWorkspace', () => {
     expect(windowElement.style.top).toBe('60px');
   });
 
-  it('keeps windows within the canvas bounds while dragging', () => {
+  it('keeps windows within the canvas bounds while dragging', async () => {
     const workspace = createWorkspace();
 
     const file = new File(['dummy'], 'bounded-drag.pdf', {
       type: 'application/pdf',
     });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file);
 
     const windowElement = workspace.querySelector('.workspace__window');
     const header = workspace.querySelector('.workspace__window-header');
@@ -387,17 +531,12 @@ describe('createWorkspace', () => {
     expect(windowElement.style.top).toBe('80px');
   });
 
-  it('resizes windows via the resize handle while enforcing minimum bounds', () => {
+  it('resizes windows via the resize handle while enforcing minimum bounds', async () => {
     const workspace = createWorkspace();
 
     const file = new File(['dummy'], 'resize.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file);
 
     const windowElement = workspace.querySelector('.workspace__window');
     const handle = workspace.querySelector('.workspace__window-resize');
@@ -465,19 +604,14 @@ describe('createWorkspace', () => {
     expect(shrunkenHeight).toBeGreaterThanOrEqual(220);
   });
 
-  it('limits window resizing to stay within the canvas bounds', () => {
+  it('limits window resizing to stay within the canvas bounds', async () => {
     const workspace = createWorkspace();
 
     const file = new File(['dummy'], 'bounded-resize.pdf', {
       type: 'application/pdf',
     });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file);
 
     const windowElement = workspace.querySelector('.workspace__window');
     const handle = workspace.querySelector('.workspace__window-resize');
@@ -524,25 +658,14 @@ describe('createWorkspace', () => {
     expect(windowElement.style.height).toBe('420px');
   });
 
-  it('pins windows so they remain above other documents', () => {
+  it('pins windows so they remain above other documents', async () => {
     const workspace = createWorkspace();
 
     const firstFile = new File(['dummy'], 'pin-first.pdf', { type: 'application/pdf' });
     const secondFile = new File(['dummy'], 'pin-second.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file: firstFile },
-      }),
-    );
-
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file: secondFile },
-      }),
-    );
+    await openWindow(workspace, firstFile);
+    await openWindow(workspace, secondFile);
 
     const windows = workspace.querySelectorAll('.workspace__window');
     const pinButton = workspace.querySelector('.workspace__window-pin');
@@ -579,16 +702,11 @@ describe('createWorkspace', () => {
     expect(pinButton.textContent).toBe('ピン留め');
   });
 
-  it('changes window pages through the navigation controls and emits updates', () => {
+  it('changes window pages through the navigation controls and emits updates', async () => {
     const workspace = createWorkspace();
     const file = new File(['dummy'], 'pages.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file, { totalPages: 8 });
 
     const pageInput = workspace.querySelector('.workspace__window-page-input');
     const pageForm = workspace.querySelector('.workspace__window-page');
@@ -603,10 +721,12 @@ describe('createWorkspace', () => {
     workspace.addEventListener('workspace:window-page-change', handler);
 
     expect(prevButton.disabled).toBe(true);
+    expect(nextButton.disabled).toBe(false);
 
     nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.page).toBe(2);
+    expect(handler.mock.calls[0][0].detail.totalPages).toBe(8);
     expect(pageInput.value).toBe('2');
     expect(prevButton.disabled).toBe(false);
 
@@ -614,24 +734,21 @@ describe('createWorkspace', () => {
     pageForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     expect(handler).toHaveBeenCalledTimes(2);
     expect(handler.mock.calls[1][0].detail.page).toBe(5);
+    expect(handler.mock.calls[1][0].detail.totalPages).toBe(8);
     expect(pageInput.value).toBe('5');
 
     prevButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(handler).toHaveBeenCalledTimes(3);
     expect(handler.mock.calls[2][0].detail.page).toBe(4);
+    expect(handler.mock.calls[2][0].detail.totalPages).toBe(8);
     expect(pageInput.value).toBe('4');
   });
 
-  it('supports keyboard page navigation when the window is focused', () => {
+  it('supports keyboard page navigation when the window is focused', async () => {
     const workspace = createWorkspace();
     const file = new File(['dummy'], 'keyboard.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file, { totalPages: 3 });
 
     const windowElement = workspace.querySelector('.workspace__window');
     const pageInput = workspace.querySelector('.workspace__window-page-input');
@@ -649,6 +766,7 @@ describe('createWorkspace', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.page).toBe(2);
+    expect(handler.mock.calls[0][0].detail.totalPages).toBe(3);
 
     windowElement.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
@@ -656,6 +774,7 @@ describe('createWorkspace', () => {
 
     expect(handler).toHaveBeenCalledTimes(2);
     expect(handler.mock.calls[1][0].detail.page).toBe(1);
+    expect(handler.mock.calls[1][0].detail.totalPages).toBe(3);
 
     pageInput.focus();
     pageInput.dispatchEvent(
@@ -665,16 +784,11 @@ describe('createWorkspace', () => {
     expect(handler).toHaveBeenCalledTimes(2);
   });
 
-  it('sanitises invalid page input and keeps the current page when left blank', () => {
+  it('sanitises invalid page input and keeps the current page when left blank', async () => {
     const workspace = createWorkspace();
     const file = new File(['dummy'], 'sanitize.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file, { totalPages: 4 });
 
     const pageInput = workspace.querySelector('.workspace__window-page-input');
 
@@ -688,27 +802,21 @@ describe('createWorkspace', () => {
     pageInput.value = '0';
     pageInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler.mock.calls[0][0].detail.page).toBe(1);
+    expect(handler).not.toHaveBeenCalled();
     expect(pageInput.value).toBe('1');
 
     pageInput.value = '   ';
     pageInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).not.toHaveBeenCalled();
     expect(pageInput.value).toBe('1');
   });
 
-  it('adjusts zoom levels via the toolbar controls and announces the change', () => {
+  it('adjusts zoom levels via the toolbar controls and announces the change', async () => {
     const workspace = createWorkspace();
     const file = new File(['dummy'], 'zoom.pdf', { type: 'application/pdf' });
 
-    workspace.dispatchEvent(
-      new CustomEvent('workspace:file-open-request', {
-        bubbles: true,
-        detail: { file },
-      }),
-    );
+    await openWindow(workspace, file, { totalPages: 5 });
 
     const zoomDisplay = workspace.querySelector('.workspace__window-zoom-display');
     const zoomOut = workspace.querySelector('.workspace__window-zoom-control--out');
@@ -729,6 +837,7 @@ describe('createWorkspace', () => {
     zoomIn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.zoom).toBeCloseTo(1.1, 2);
+    expect(handler.mock.calls[0][0].detail.page).toBe(1);
     expect(zoomDisplay.textContent).toBe('110%');
     expect(zoomOut.disabled).toBe(false);
     expect(zoomReset.disabled).toBe(false);
@@ -744,6 +853,7 @@ describe('createWorkspace', () => {
     }
 
     expect(lastCallAfterMax[0].detail.zoom).toBeCloseTo(2, 2);
+    expect(lastCallAfterMax[0].detail.page).toBe(1);
     expect(zoomDisplay.textContent).toBe('200%');
     expect(zoomIn.disabled).toBe(true);
 
@@ -755,6 +865,7 @@ describe('createWorkspace', () => {
     }
 
     expect(afterDecrease[0].detail.zoom).toBeCloseTo(1.9, 2);
+    expect(afterDecrease[0].detail.page).toBe(1);
     expect(zoomDisplay.textContent).toBe('190%');
     expect(zoomIn.disabled).toBe(false);
 
@@ -769,6 +880,7 @@ describe('createWorkspace', () => {
     }
 
     expect(afterMinCall[0].detail.zoom).toBeCloseTo(0.5, 2);
+    expect(afterMinCall[0].detail.page).toBe(1);
     expect(zoomDisplay.textContent).toBe('50%');
     expect(zoomOut.disabled).toBe(true);
 
@@ -780,21 +892,23 @@ describe('createWorkspace', () => {
     }
 
     expect(afterReset[0].detail.zoom).toBeCloseTo(1, 3);
+    expect(afterReset[0].detail.page).toBe(1);
     expect(zoomDisplay.textContent).toBe('100%');
     expect(zoomOut.disabled).toBe(false);
     expect(zoomIn.disabled).toBe(false);
     expect(zoomReset.disabled).toBe(true);
   });
 
-  it('closes windows and emits a closure event', () => {
+  it('closes windows and emits a closure event', async () => {
     const workspace = createWorkspace();
     const file = new File(['dummy'], 'close.pdf', { type: 'application/pdf' });
-    const openRequest = new CustomEvent('workspace:file-open-request', {
-      bubbles: true,
-      detail: { file },
-    });
+    storageMocks.persist.mockClear();
+    storageMocks.remove.mockClear();
 
-    workspace.dispatchEvent(openRequest);
+    await openWindow(workspace, file);
+    await flushPromises();
+
+    expect(storageMocks.persist).toHaveBeenCalled();
 
     const closeButton = workspace.querySelector('.workspace__window-close');
 
@@ -805,10 +919,20 @@ describe('createWorkspace', () => {
     const handler = vi.fn();
     workspace.addEventListener('workspace:window-close', handler);
 
+    const windowElement = workspace.querySelector('.workspace__window');
+
     closeButton.click();
+
+    await flushPromises();
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.file).toBe(file);
     expect(workspace.querySelector('.workspace__window')).toBeNull();
+
+    if (windowElement?.dataset.windowId) {
+      expect(storageMocks.remove).toHaveBeenCalledWith(windowElement.dataset.windowId);
+    } else {
+      expect(storageMocks.remove).toHaveBeenCalled();
+    }
   });
 });

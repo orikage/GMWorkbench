@@ -44,5 +44,18 @@ pnpm vitest -- --watch
 - `workspace:file-queue-remove` — キューから PDF を取り消したとき。
 - `workspace:window-close` — ワークスペース上のウィンドウを閉じたとき。
 - `workspace:window-pin-toggle` — ウィンドウのピン留め状態を切り替えたとき。
-- `workspace:window-page-change` — ページ入力やナビゲーション、キーボード操作で表示ページが変わったとき。
-- `workspace:window-zoom-change` — ウィンドウの倍率を拡大・縮小・リセットしたとき。詳細に `zoom` (0.5〜2.0) を含む。
+- `workspace:window-page-change` — ページ入力やナビゲーション、キーボード操作で表示ページが変わったとき。詳細には `page` と `totalPages` を含む。
+- `workspace:window-zoom-change` — ウィンドウの倍率を拡大・縮小・リセットしたとき。詳細には `zoom` (0.5〜2.0) と現在の `page` を含む。
+
+## PDFビューア統合
+
+- `pdfjs-dist` を用いて PDF をローカルで描画し、各ウィンドウは最新ページのキャンバスを生成します。
+- ワーカーは `pdfjs-dist/build/pdf.worker.min.mjs?url` を経由してバンドルしているため、Vite 環境では追加設定なしで動作します。
+- ビューア要素には `data-page`, `data-zoom`, `data-total-pages` を付与し、テストやアクセシビリティ計測から現在の表示状態を取得できます。
+- 既存のページ／ズーム操作は描画と同期しており、イベントと DOM 属性のどちらからでも最新の状態を参照できます。
+
+## セッション永続化
+
+- IndexedDB にウィンドウ配置・ページ・ズーム・ピン状態を保存し、ブラウザを再読み込みしても直近の PDF 状態を復元します。
+- PDF ファイル本体はローカルのみで保持され、`File`/`Blob` を直接 IndexedDB に退避します。ネットワークへ送信されることはありません。
+- ブラウザの「サイトデータを削除」を実行すると保存されたセッションが初期化されます。現状 UI 上のリセット手段は追って提供予定です。
