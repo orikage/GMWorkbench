@@ -2,6 +2,7 @@ const DATABASE_NAME = 'gmworkbench';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'workspace-windows';
 const MAX_STORED_HISTORY = 50;
+const ROTATION_STEP = 90;
 
 const memoryStore = new Map();
 let databasePromise = null;
@@ -63,6 +64,17 @@ function toBlob(file) {
   return Promise.reject(new TypeError('Provided file is not blob-compatible.'));
 }
 
+function normalizeRotation(value) {
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+
+  const rounded = Math.round(value / ROTATION_STEP) * ROTATION_STEP;
+  const wrapped = ((rounded % 360) + 360) % 360;
+  const normalized = wrapped === 360 ? 0 : wrapped;
+  return normalized;
+}
+
 function normalizeForStorage(state) {
   const normalized = { id: state.id };
 
@@ -100,6 +112,12 @@ function normalizeForStorage(state) {
 
   if (Number.isFinite(state.zoom)) {
     normalized.zoom = state.zoom;
+  }
+
+  const rotation = normalizeRotation(state.rotation);
+
+  if (Number.isFinite(rotation)) {
+    normalized.rotation = rotation;
   }
 
   if (Number.isFinite(state.totalPages)) {
@@ -263,6 +281,7 @@ function normalizeFromStorage(record) {
     height: Number.isFinite(record.height) ? record.height : undefined,
     page: Number.isFinite(record.page) ? record.page : undefined,
     zoom: Number.isFinite(record.zoom) ? record.zoom : undefined,
+    rotation: Number.isFinite(record.rotation) ? normalizeRotation(record.rotation) : undefined,
     totalPages: Number.isFinite(record.totalPages) ? record.totalPages : undefined,
     pinned: typeof record.pinned === 'boolean' ? record.pinned : undefined,
     openedAt: Number.isFinite(record.openedAt) ? record.openedAt : undefined,

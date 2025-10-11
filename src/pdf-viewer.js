@@ -39,7 +39,7 @@ function updateStatus(statusElement, message) {
   }
 }
 
-function updateMetadata(container, { page, zoom, totalPages }) {
+function updateMetadata(container, { page, zoom, totalPages, rotation }) {
   if (!container) {
     return;
   }
@@ -60,6 +60,12 @@ function updateMetadata(container, { page, zoom, totalPages }) {
     container.dataset.totalPages = String(totalPages);
   } else {
     delete container.dataset.totalPages;
+  }
+
+  if (Number.isFinite(rotation)) {
+    container.dataset.rotation = String(rotation);
+  } else {
+    delete container.dataset.rotation;
   }
 }
 
@@ -149,7 +155,7 @@ export function createPdfViewer(file) {
     }
   };
 
-  const render = async ({ page, zoom }) => {
+  const render = async ({ page, zoom, rotation }) => {
     if (!pdfDocument) {
       return;
     }
@@ -166,7 +172,10 @@ export function createPdfViewer(file) {
 
     try {
       const pdfPage = await pdfDocument.getPage(page);
-      const viewport = pdfPage.getViewport({ scale: zoom });
+      const normalizedRotation = Number.isFinite(rotation)
+        ? ((Math.round(rotation / 90) * 90) % 360 + 360) % 360
+        : 0;
+      const viewport = pdfPage.getViewport({ scale: zoom, rotation: normalizedRotation });
       const renderContext = prepareCanvas(canvas, viewport);
 
       if (!renderContext) {

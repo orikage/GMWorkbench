@@ -97,10 +97,15 @@ beforeEach(() => {
 
   pdfMocks.renderMock.mockImplementation(() => ({ promise: Promise.resolve() }));
   pdfMocks.getPageMock.mockImplementation(async () => ({
-    getViewport: ({ scale }) => ({
-      width: 600 * scale,
-      height: 800 * scale,
-    }),
+    getViewport: ({ scale, rotation = 0 }) => {
+      const normalizedRotation = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
+      const rotated = normalizedRotation === 90 || normalizedRotation === 270;
+
+      return {
+        width: (rotated ? 800 : 600) * scale,
+        height: (rotated ? 600 : 800) * scale,
+      };
+    },
     render: pdfMocks.renderMock,
   }));
   pdfMocks.getDocumentMock.mockImplementation(() => ({
@@ -784,6 +789,13 @@ describe('createWorkspace', () => {
     const zoomInButton = windowElement.querySelector(
       '.workspace__window-zoom-control--in',
     );
+    const rotateLeftButton = windowElement.querySelector(
+      '.workspace__window-rotation-control--left',
+    );
+    const rotateRightButton = windowElement.querySelector(
+      '.workspace__window-rotation-control--right',
+    );
+    const rotateResetButton = windowElement.querySelector('.workspace__window-rotation-reset');
     const duplicateButton = windowElement.querySelector('.workspace__window-duplicate');
     const pinButton = windowElement.querySelector('.workspace__window-pin');
     const colorButton = windowElement.querySelector('.workspace__window-color');
@@ -801,7 +813,10 @@ describe('createWorkspace', () => {
       !notesInput ||
       !renameButton ||
       !titleInput ||
-      !titleLabel
+      !titleLabel ||
+      !rotateLeftButton ||
+      !rotateRightButton ||
+      !rotateResetButton
     ) {
       throw new Error('duplicate control structure is incomplete');
     }
@@ -811,6 +826,9 @@ describe('createWorkspace', () => {
     await flushPromises();
 
     zoomInButton.dispatchEvent(new Event('click', { bubbles: true }));
+    await flushPromises();
+
+    rotateLeftButton.dispatchEvent(new Event('click', { bubbles: true }));
     await flushPromises();
 
     pinButton.dispatchEvent(new Event('click', { bubbles: true }));
@@ -856,13 +874,16 @@ describe('createWorkspace', () => {
 
     expect(originalViewer?.dataset.page).toBe('3');
     expect(originalViewer?.dataset.zoom).toBe('1.1');
+    expect(originalViewer?.dataset.rotation).toBe('270');
     expect(duplicateViewer?.dataset.page).toBe('3');
     expect(duplicateViewer?.dataset.zoom).toBe('1.1');
+    expect(duplicateViewer?.dataset.rotation).toBe('270');
     expect(duplicateNotes?.value).toBe('魔王城の罠メモ');
     expect(duplicateWindow?.dataset.notesLength).toBe(String('魔王城の罠メモ'.length));
     expect(originalWindow.dataset.windowTitle).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.windowTitle).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.windowColor).toBe('emerald');
+    expect(duplicateWindow?.dataset.rotation).toBe('270');
     expect(titleLabel.textContent).toBe('魔王討伐計画');
     expect(duplicateTitle?.textContent).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.pageHistoryLength).toBe(
@@ -873,6 +894,7 @@ describe('createWorkspace', () => {
     );
 
     expect(duplicateWindow?.classList.contains('workspace__window--pinned')).toBe(true);
+    expect(rotateResetButton.disabled).toBe(false);
 
     const originalLeft = Number.parseInt(originalWindow.style.left ?? '0', 10);
     const originalTop = Number.parseInt(originalWindow.style.top ?? '0', 10);
@@ -887,6 +909,7 @@ describe('createWorkspace', () => {
     expect(detail.file).toBe(file);
     expect(detail.page).toBe(3);
     expect(detail.zoom).toBeCloseTo(1.1, 3);
+    expect(detail.rotation).toBe(270);
     expect(detail.totalPages).toBe(6);
     expect(detail.sourceId).toBe(originalWindow.dataset.windowId);
     expect(detail.duplicateId).toBe(duplicateWindow?.dataset.windowId);
@@ -922,6 +945,14 @@ describe('createWorkspace', () => {
     const zoomOutButton = workspace.querySelector('.workspace__window-zoom-control--out');
     const zoomInButton = workspace.querySelector('.workspace__window-zoom-control--in');
     const zoomResetButton = workspace.querySelector('.workspace__window-zoom-reset');
+    const rotationLeftButton = workspace.querySelector(
+      '.workspace__window-rotation-control--left',
+    );
+    const rotationRightButton = workspace.querySelector(
+      '.workspace__window-rotation-control--right',
+    );
+    const rotationResetButton = workspace.querySelector('.workspace__window-rotation-reset');
+    const rotationDisplay = workspace.querySelector('.workspace__window-rotation-display');
 
     if (
       !windowElement ||
@@ -942,7 +973,11 @@ describe('createWorkspace', () => {
       !lastButton ||
       !zoomOutButton ||
       !zoomInButton ||
-      !zoomResetButton
+      !zoomResetButton ||
+      !rotationLeftButton ||
+      !rotationRightButton ||
+      !rotationResetButton ||
+      !rotationDisplay
     ) {
       throw new Error('rename controls must exist for the test');
     }
@@ -985,9 +1020,13 @@ describe('createWorkspace', () => {
     expect(zoomOutButton.getAttribute('aria-label')).toBe('遭遇表 を縮小表示');
     expect(zoomInButton.getAttribute('aria-label')).toBe('遭遇表 を拡大表示');
     expect(zoomResetButton.getAttribute('aria-label')).toBe('遭遇表 の表示倍率をリセット');
+    expect(rotationLeftButton.getAttribute('aria-label')).toBe('遭遇表 を反時計回りに回転');
+    expect(rotationRightButton.getAttribute('aria-label')).toBe('遭遇表 を時計回りに回転');
+    expect(rotationResetButton.getAttribute('aria-label')).toBe('遭遇表 の回転をリセット');
     expect(renameButton.textContent).toBe('名称変更');
     expect(colorButton.textContent).toBe('色: 標準');
     expect(windowElement.dataset.windowColor).toBe('neutral');
+    expect(rotationDisplay.textContent).toBe('0°');
 
     const renamePersist =
       storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
@@ -998,6 +1037,7 @@ describe('createWorkspace', () => {
 
     expect(renamePersist[0].title).toBe('遭遇表');
     expect(renamePersist[0].color).toBe('neutral');
+    expect(renamePersist[0].rotation).toBe(0);
 
     renameButton.click();
     await flushPromises();
@@ -1597,6 +1637,99 @@ describe('createWorkspace', () => {
     expect(zoomOut.disabled).toBe(false);
     expect(zoomIn.disabled).toBe(false);
     expect(zoomReset.disabled).toBe(true);
+  });
+
+  it('adjusts rotation via toolbar controls and emits updates', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'rotation.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file, { totalPages: 4 });
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const viewerElement = workspace.querySelector('.workspace__window-viewer');
+    const rotateLeft = workspace.querySelector('.workspace__window-rotation-control--left');
+    const rotateRight = workspace.querySelector('.workspace__window-rotation-control--right');
+    const rotateReset = workspace.querySelector('.workspace__window-rotation-reset');
+    const rotationDisplay = workspace.querySelector('.workspace__window-rotation-display');
+
+    if (
+      !windowElement ||
+      !viewerElement ||
+      !rotateLeft ||
+      !rotateRight ||
+      !rotateReset ||
+      !rotationDisplay
+    ) {
+      throw new Error('rotation controls must exist for the test');
+    }
+
+    expect(rotationDisplay.textContent).toBe('0°');
+    expect(rotateReset.disabled).toBe(true);
+    expect(windowElement.dataset.rotation).toBe('0');
+    expect(viewerElement.dataset.rotation).toBe('0');
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-rotation-change', handler);
+
+    rotateRight.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].detail.rotation).toBe(90);
+    expect(handler.mock.calls[0][0].detail.page).toBe(1);
+    expect(handler.mock.calls[0][0].detail.zoom).toBeCloseTo(1, 2);
+    expect(windowElement.dataset.rotation).toBe('90');
+    expect(viewerElement.dataset.rotation).toBe('90');
+    expect(rotationDisplay.textContent).toBe('90°');
+    expect(rotateReset.disabled).toBe(false);
+
+    rotateRight.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler.mock.calls[1][0].detail.rotation).toBe(180);
+    expect(windowElement.dataset.rotation).toBe('180');
+    expect(rotationDisplay.textContent).toBe('180°');
+
+    rotateLeft.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(3);
+    expect(handler.mock.calls[2][0].detail.rotation).toBe(90);
+    expect(windowElement.dataset.rotation).toBe('90');
+
+    rotateLeft.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(4);
+    expect(handler.mock.calls[3][0].detail.rotation).toBe(0);
+    expect(windowElement.dataset.rotation).toBe('0');
+    expect(rotationDisplay.textContent).toBe('0°');
+    expect(rotateReset.disabled).toBe(true);
+
+    rotateLeft.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(5);
+    expect(handler.mock.calls[4][0].detail.rotation).toBe(270);
+    expect(windowElement.dataset.rotation).toBe('270');
+    expect(viewerElement.dataset.rotation).toBe('270');
+    expect(rotationDisplay.textContent).toBe('270°');
+    expect(rotateReset.disabled).toBe(false);
+
+    rotateReset.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(6);
+    expect(handler.mock.calls[5][0].detail.rotation).toBe(0);
+    expect(windowElement.dataset.rotation).toBe('0');
+    expect(viewerElement.dataset.rotation).toBe('0');
+    expect(rotationDisplay.textContent).toBe('0°');
+    expect(rotateReset.disabled).toBe(true);
+
+    await flushPromises();
+
+    const lastPersist = storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
+
+    if (!lastPersist) {
+      throw new Error('rotation persistence call is required');
+    }
+
+    expect(lastPersist[0].rotation).toBe(0);
   });
 
   it('closes windows and emits a closure event', async () => {

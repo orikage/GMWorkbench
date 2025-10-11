@@ -19,3 +19,4 @@
 - [2025-10-11 — ページ履歴ナビゲーションの追加](changelog/2025-10-11-window-page-history.md)
 - [2025-10-11 — ウィンドウカラータグとイベント通知](changelog/2025-10-11-window-color-tags.md)
 - [2025-10-11 — ページ端ジャンプコントロールの追加](changelog/2025-10-11-window-page-boundaries.md)
+- [2025-10-11 — ウィンドウ回転コントロールの追加](changelog/2025-10-11-window-rotation.md)

@@ -53,9 +53,10 @@ pnpm docs:print:decisions
 - `workspace:file-queue-remove` — キューから PDF を取り消したとき。
 - `workspace:window-close` — ワークスペース上のウィンドウを閉じたとき。
 - `workspace:window-pin-toggle` — ウィンドウのピン留め状態を切り替えたとき。
-- `workspace:window-page-change` — ページ入力やナビゲーション、キーボード操作で表示ページが変わったとき。詳細には `page`、`totalPages`、`historyIndex`、`historyLength` を含む。
-- `workspace:window-zoom-change` — ウィンドウの倍率を拡大・縮小・リセットしたとき。詳細には `zoom` (0.5〜2.0) と現在の `page` を含む。
-- `workspace:window-duplicate` — ウィンドウの「複製」を押したとき。`page`, `zoom`, `totalPages`, `sourceId`, `duplicateId`, `title` を併せて通知する。
+- `workspace:window-page-change` — ページ入力やナビゲーション、キーボード操作で表示ページが変わったとき。詳細には `page`、`totalPages`、`historyIndex`、`historyLength`、現在の `zoom` と `rotation` を含む。
+- `workspace:window-zoom-change` — ウィンドウの倍率を拡大・縮小・リセットしたとき。詳細には `zoom` (0.5〜2.0)、現在の `page`、`rotation` を含む。
+- `workspace:window-rotation-change` — 回転ツールバーで表示角度を変更したとき。`rotation` (0°/90°/180°/270°)、`page`、`zoom` を通知する。
+- `workspace:window-duplicate` — ウィンドウの「複製」を押したとき。`page`, `zoom`, `rotation`, `totalPages`, `sourceId`, `duplicateId`, `title` を併せて通知する。
 - `workspace:window-notes-change` — ウィンドウ内のメモが更新されたとき。`detail.notes` に最新テキストを含む。
 - `workspace:window-title-change` — ウィンドウタイトルが保存されたとき。`detail.title` に確定したタイトルを含む。
 - `workspace:window-color-change` — ウィンドウの色タグを切り替えたとき。`detail.color` に現在の色 ID を含む。
@@ -65,12 +66,12 @@ pnpm docs:print:decisions
 
 - `pdfjs-dist` を用いて PDF をローカルで描画し、各ウィンドウは最新ページのキャンバスを生成します。
 - ワーカーは `pdfjs-dist/build/pdf.worker.min.mjs?url` を経由してバンドルしているため、Vite 環境では追加設定なしで動作します。
-- ビューア要素には `data-page`, `data-zoom`, `data-total-pages` を付与し、テストやアクセシビリティ計測から現在の表示状態を取得できます。
+- ビューア要素には `data-page`, `data-zoom`, `data-rotation`, `data-total-pages` を付与し、テストやアクセシビリティ計測から現在の表示状態を取得できます。
 - 既存のページ／ズーム操作は描画と同期しており、イベントと DOM 属性のどちらからでも最新の状態を参照できます。
 
 ## セッション永続化
 
-- IndexedDB にウィンドウ配置・ページ・ズーム・ピン状態を保存し、ブラウザを再読み込みしても直近の PDF 状態を復元します。
+- IndexedDB にウィンドウ配置・ページ・ズーム・回転・ピン状態を保存し、ブラウザを再読み込みしても直近の PDF 状態を復元します。
 - PDF ファイル本体はローカルのみで保持され、`File`/`Blob` を直接 IndexedDB に退避します。ネットワークへ送信されることはありません。
 - ブラウザの「サイトデータを削除」を実行すると保存されたセッションが初期化されます。UI 上でも「キャッシュを全削除」ボタンから保存済み PDF とウィンドウ配置を一括でリセットでき、処理完了時には `workspace:cache-cleared` を発火します。
 - メモ欄もレイアウトやページ情報と同じく永続化され、再読み込み後に内容が復元されます。
@@ -78,7 +79,7 @@ pnpm docs:print:decisions
 ## ウィンドウ複製
 
 - 各ウィンドウのヘッダーに「複製」ボタンを追加し、同じ PDF を別ページで開く操作を 1 クリックで行えます。
-- 複製時はページ・ズーム・ピン留め状態を引き継ぎ、元の位置から 24px ずらして積み重なるように配置します。
+- 複製時はページ・ズーム・回転・ピン留め状態を引き継ぎ、元の位置から 24px ずらして積み重なるように配置します。
 - 複製後には `workspace:window-duplicate` を発火し、生成されたウィンドウ ID や表示状態を外部へ渡せます。
 
 ## ウィンドウメモ
@@ -98,6 +99,12 @@ pnpm docs:print:decisions
 - ヘッダーの「色」ボタンで標準 → 琥珀 → 翡翠 → 紅玉 → 藍の順にタグカラーを循環させられます。
 - 選択中の色は `data-window-color` と `workspace__window--color-*` クラスに反映され、スタイルとテストから一貫して参照できます。
 - 変更時には `workspace:window-color-change` を発火し、`detail.color` に現在の色 ID を含めます。選択内容は永続化・複製・復元でも保持されます。
+
+## ウィンドウ回転
+
+- ツールバー右側に回転パネルを追加し、↺ / ↻ ボタンで 90° 単位の回転、0° ボタンでリセットできます。
+- 現在の角度は `data-rotation` とツールバー表示に反映され、`workspace:window-rotation-change` で `rotation`・`page`・`zoom` を通知します。
+- 回転状態は永続化と複製・復元でも保持され、pdf.js の描画も即時に追従します。
 
 ## ページ履歴ナビゲーション
 

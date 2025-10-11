@@ -27,12 +27,15 @@ const WINDOW_DUPLICATE_EVENT = 'workspace:window-duplicate';
 const WINDOW_NOTES_CHANGE_EVENT = 'workspace:window-notes-change';
 const WINDOW_TITLE_CHANGE_EVENT = 'workspace:window-title-change';
 const WINDOW_COLOR_CHANGE_EVENT = 'workspace:window-color-change';
+const WINDOW_ROTATION_CHANGE_EVENT = 'workspace:window-rotation-change';
 const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
 const WINDOW_ZOOM_STEP = 0.1;
 const PAGE_HISTORY_LIMIT = 50;
 const WORKSPACE_CACHE_CLEARED_EVENT = 'workspace:cache-cleared';
+const DEFAULT_WINDOW_ROTATION = 0;
+const ROTATION_STEP = 90;
 const WINDOW_COLORS = [
   { id: 'neutral', label: '標準' },
   { id: 'amber', label: '琥珀' },
@@ -486,6 +489,10 @@ function createWindowCanvas() {
     let zoomInButton;
     let zoomResetButton;
     let zoomDisplay;
+    let rotateLeftButton;
+    let rotateRightButton;
+    let rotateResetButton;
+    let rotationDisplay;
     let currentZoom = Number.isFinite(options.zoom)
       ? Number.parseFloat(options.zoom)
       : DEFAULT_WINDOW_ZOOM;
@@ -520,6 +527,18 @@ function createWindowCanvas() {
     };
 
     let windowColor = sanitizeColor(options.color);
+
+    const normalizeRotation = (value) => {
+      if (!Number.isFinite(value)) {
+        return DEFAULT_WINDOW_ROTATION;
+      }
+
+      const rounded = Math.round(value / ROTATION_STEP) * ROTATION_STEP;
+      const wrapped = ((rounded % 360) + 360) % 360;
+      return wrapped === 360 ? 0 : wrapped;
+    };
+
+    let currentRotation = normalizeRotation(options.rotation);
 
     const viewer = createPdfViewer(file);
     let disposed = false;
@@ -592,6 +611,7 @@ function createWindowCanvas() {
         height: parsePixels(windowElement.style.height, initialHeight),
         page: currentPage,
         zoom: currentZoom,
+        rotation: currentRotation,
         totalPages: Number.isFinite(totalPages) ? totalPages : undefined,
         pinned: windowElement.classList.contains('workspace__window--pinned'),
         openedAt,
@@ -638,13 +658,35 @@ function createWindowCanvas() {
       syncNotesMetadata();
     };
 
+    const syncRotationState = () => {
+      if (rotationDisplay) {
+        rotationDisplay.textContent = `${currentRotation}°`;
+      }
+
+      if (rotateResetButton) {
+        rotateResetButton.disabled = currentRotation === DEFAULT_WINDOW_ROTATION;
+      }
+
+      windowElement.dataset.rotation = String(currentRotation);
+    };
+
     const updateViewerState = () => {
-      viewer.updateState({ page: currentPage, zoom: currentZoom, totalPages });
+      syncRotationState();
+      viewer.updateState({
+        page: currentPage,
+        zoom: currentZoom,
+        totalPages,
+        rotation: currentRotation,
+      });
     };
 
     const renderCurrentPage = async () => {
       try {
-        await viewer.render({ page: currentPage, zoom: currentZoom });
+        await viewer.render({
+          page: currentPage,
+          zoom: currentZoom,
+          rotation: currentRotation,
+        });
       } catch (error) {
         // Rendering errors are surfaced via viewer status; suppress console noise in tests.
       }
@@ -924,6 +966,8 @@ function createWindowCanvas() {
           totalPages,
           historyIndex: pageHistoryIndex,
           historyLength: pageHistory.length,
+          rotation: currentRotation,
+          zoom: currentZoom,
         },
       });
       windowElement.dispatchEvent(pageChange);
@@ -985,6 +1029,7 @@ function createWindowCanvas() {
           file,
           zoom: currentZoom,
           page: currentPage,
+          rotation: currentRotation,
         },
       });
       windowElement.dispatchEvent(zoomChange);
@@ -997,6 +1042,42 @@ function createWindowCanvas() {
 
     const resetZoom = () => {
       commitZoomChange(DEFAULT_WINDOW_ZOOM);
+    };
+
+    const commitRotationChange = (rotation) => {
+      const nextRotation = normalizeRotation(rotation);
+
+      if (nextRotation === currentRotation) {
+        syncRotationState();
+        return;
+      }
+
+      currentRotation = nextRotation;
+      updateViewerState();
+      void renderCurrentPage();
+      bringToFront();
+
+      const rotationChange = new CustomEvent(WINDOW_ROTATION_CHANGE_EVENT, {
+        bubbles: true,
+        detail: {
+          file,
+          rotation: currentRotation,
+          page: currentPage,
+          zoom: currentZoom,
+        },
+      });
+
+      windowElement.dispatchEvent(rotationChange);
+      schedulePersist();
+    };
+
+    const stepRotation = (steps) => {
+      const delta = Number.isFinite(steps) ? Math.trunc(steps) * ROTATION_STEP : 0;
+      commitRotationChange(currentRotation + delta);
+    };
+
+    const resetRotation = () => {
+      commitRotationChange(DEFAULT_WINDOW_ROTATION);
     };
 
     const header = document.createElement('header');
@@ -1174,6 +1255,18 @@ function createWindowCanvas() {
         zoomResetButton.setAttribute('aria-label', `${windowTitle} の表示倍率をリセット`);
       }
 
+      if (rotateLeftButton) {
+        rotateLeftButton.setAttribute('aria-label', `${windowTitle} を反時計回りに回転`);
+      }
+
+      if (rotateRightButton) {
+        rotateRightButton.setAttribute('aria-label', `${windowTitle} を時計回りに回転`);
+      }
+
+      if (rotateResetButton) {
+        rotateResetButton.setAttribute('aria-label', `${windowTitle} の回転をリセット`);
+      }
+
       if (resizeHandle) {
         resizeHandle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
       }
@@ -1295,6 +1388,7 @@ function createWindowCanvas() {
         height: currentHeight,
         page: currentPage,
         zoom: currentZoom,
+        rotation: currentRotation,
         totalPages,
         pinned: isPinned(),
         notes: notesContent,
@@ -1314,6 +1408,7 @@ function createWindowCanvas() {
           file,
           page: currentPage,
           zoom: currentZoom,
+          rotation: currentRotation,
           totalPages,
           sourceId: windowId,
           duplicateId: duplicateElement.dataset?.windowId,
@@ -1487,6 +1582,46 @@ function createWindowCanvas() {
 
     pageForm.append(pageLabel, pageInput);
 
+    const rotationGroup = document.createElement('div');
+    rotationGroup.className = 'workspace__window-rotation';
+
+    rotateLeftButton = document.createElement('button');
+    rotateLeftButton.type = 'button';
+    rotateLeftButton.className =
+      'workspace__window-rotation-control workspace__window-rotation-control--left';
+    rotateLeftButton.textContent = '↺';
+    rotateLeftButton.addEventListener('click', () => {
+      stepRotation(-1);
+    });
+
+    rotationDisplay = document.createElement('span');
+    rotationDisplay.className = 'workspace__window-rotation-display';
+    rotationDisplay.setAttribute('aria-live', 'polite');
+
+    rotateRightButton = document.createElement('button');
+    rotateRightButton.type = 'button';
+    rotateRightButton.className =
+      'workspace__window-rotation-control workspace__window-rotation-control--right';
+    rotateRightButton.textContent = '↻';
+    rotateRightButton.addEventListener('click', () => {
+      stepRotation(1);
+    });
+
+    rotateResetButton = document.createElement('button');
+    rotateResetButton.type = 'button';
+    rotateResetButton.className = 'workspace__window-rotation-reset';
+    rotateResetButton.textContent = '0°';
+    rotateResetButton.addEventListener('click', () => {
+      resetRotation();
+    });
+
+    rotationGroup.append(
+      rotateLeftButton,
+      rotationDisplay,
+      rotateRightButton,
+      rotateResetButton,
+    );
+
     const zoomGroup = document.createElement('div');
     zoomGroup.className = 'workspace__window-zoom';
 
@@ -1520,6 +1655,10 @@ function createWindowCanvas() {
 
     zoomGroup.append(zoomOutButton, zoomDisplay, zoomInButton, zoomResetButton);
 
+    const adjustmentsGroup = document.createElement('div');
+    adjustmentsGroup.className = 'workspace__window-adjustments';
+    adjustmentsGroup.append(rotationGroup, zoomGroup);
+
     toolbar.append(
       firstPageButton,
       historyBackButton,
@@ -1528,7 +1667,7 @@ function createWindowCanvas() {
       nextButton,
       historyForwardButton,
       lastPageButton,
-      zoomGroup,
+      adjustmentsGroup,
     );
 
     body.append(toolbar, viewer.element, notesSection);
