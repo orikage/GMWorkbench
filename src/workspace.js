@@ -476,8 +476,10 @@ function createWindowCanvas() {
 
     currentPage = pageHistory[pageHistoryIndex] ?? currentPage;
     let pageInput;
+    let firstPageButton;
     let prevButton;
     let nextButton;
+    let lastPageButton;
     let historyBackButton;
     let historyForwardButton;
     let zoomOutButton;
@@ -781,6 +783,10 @@ function createWindowCanvas() {
         }
       }
 
+      if (firstPageButton) {
+        firstPageButton.disabled = currentPage <= 1;
+      }
+
       if (prevButton) {
         prevButton.disabled = currentPage <= 1;
       }
@@ -790,6 +796,14 @@ function createWindowCanvas() {
           nextButton.disabled = currentPage >= totalPages;
         } else {
           nextButton.disabled = false;
+        }
+      }
+
+      if (lastPageButton) {
+        if (Number.isFinite(totalPages)) {
+          lastPageButton.disabled = currentPage >= totalPages;
+        } else {
+          lastPageButton.disabled = true;
         }
       }
 
@@ -925,6 +939,31 @@ function createWindowCanvas() {
       }
 
       commitPageChange(nextPage);
+    };
+
+    const goToFirstPage = () => {
+      if (currentPage <= 1) {
+        syncNavigationState();
+        return;
+      }
+
+      commitPageChange(1);
+    };
+
+    const goToLastPage = () => {
+      if (!Number.isFinite(totalPages)) {
+        syncNavigationState();
+        return;
+      }
+
+      const target = clampPage(totalPages);
+
+      if (currentPage >= target) {
+        syncNavigationState();
+        return;
+      }
+
+      commitPageChange(target);
     };
 
     const commitZoomChange = (zoom) => {
@@ -1107,12 +1146,20 @@ function createWindowCanvas() {
         historyForwardButton.setAttribute('aria-label', `${windowTitle} のページ履歴を進む`);
       }
 
+      if (firstPageButton) {
+        firstPageButton.setAttribute('aria-label', `${windowTitle} の最初のページへ移動`);
+      }
+
       if (prevButton) {
         prevButton.setAttribute('aria-label', `${windowTitle} の前のページへ移動`);
       }
 
       if (nextButton) {
         nextButton.setAttribute('aria-label', `${windowTitle} の次のページへ移動`);
+      }
+
+      if (lastPageButton) {
+        lastPageButton.setAttribute('aria-label', `${windowTitle} の最後のページへ移動`);
       }
 
       if (zoomOutButton) {
@@ -1390,6 +1437,14 @@ function createWindowCanvas() {
       pageInput?.select();
     });
 
+    firstPageButton = document.createElement('button');
+    firstPageButton.type = 'button';
+    firstPageButton.className = 'workspace__window-nav workspace__window-nav--first';
+    firstPageButton.textContent = '⏮';
+    firstPageButton.addEventListener('click', () => {
+      goToFirstPage();
+    });
+
     historyBackButton = document.createElement('button');
     historyBackButton.type = 'button';
     historyBackButton.className = 'workspace__window-nav workspace__window-nav--history-back';
@@ -1420,6 +1475,14 @@ function createWindowCanvas() {
     historyForwardButton.textContent = '進';
     historyForwardButton.addEventListener('click', () => {
       navigateHistory(1);
+    });
+
+    lastPageButton = document.createElement('button');
+    lastPageButton.type = 'button';
+    lastPageButton.className = 'workspace__window-nav workspace__window-nav--last';
+    lastPageButton.textContent = '⏭';
+    lastPageButton.addEventListener('click', () => {
+      goToLastPage();
     });
 
     pageForm.append(pageLabel, pageInput);
@@ -1458,11 +1521,13 @@ function createWindowCanvas() {
     zoomGroup.append(zoomOutButton, zoomDisplay, zoomInButton, zoomResetButton);
 
     toolbar.append(
+      firstPageButton,
       historyBackButton,
       prevButton,
       pageForm,
       nextButton,
       historyForwardButton,
+      lastPageButton,
       zoomGroup,
     );
 
@@ -1583,6 +1648,18 @@ function createWindowCanvas() {
       if (!hasModifier && event.key === '0') {
         event.preventDefault();
         resetZoom();
+        return;
+      }
+
+      if (!hasModifier && event.key === 'End') {
+        event.preventDefault();
+        goToLastPage();
+        return;
+      }
+
+      if (!hasModifier && event.key === 'Home') {
+        event.preventDefault();
+        goToFirstPage();
         return;
       }
 

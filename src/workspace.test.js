@@ -911,12 +911,14 @@ describe('createWorkspace', () => {
     const notesInput = workspace.querySelector('.workspace__window-notes-input');
     const pageForm = workspace.querySelector('.workspace__window-page');
     const pageInput = workspace.querySelector('.workspace__window-page-input');
+    const firstButton = workspace.querySelector('.workspace__window-nav--first');
     const historyBackButton = workspace.querySelector('.workspace__window-nav--history-back');
     const historyForwardButton = workspace.querySelector(
       '.workspace__window-nav--history-forward',
     );
     const prevButton = workspace.querySelector('.workspace__window-nav--previous');
     const nextButton = workspace.querySelector('.workspace__window-nav--next');
+    const lastButton = workspace.querySelector('.workspace__window-nav--last');
     const zoomOutButton = workspace.querySelector('.workspace__window-zoom-control--out');
     const zoomInButton = workspace.querySelector('.workspace__window-zoom-control--in');
     const zoomResetButton = workspace.querySelector('.workspace__window-zoom-reset');
@@ -932,10 +934,12 @@ describe('createWorkspace', () => {
       !notesInput ||
       !pageForm ||
       !pageInput ||
+      !firstButton ||
       !historyBackButton ||
       !historyForwardButton ||
       !prevButton ||
       !nextButton ||
+      !lastButton ||
       !zoomOutButton ||
       !zoomInButton ||
       !zoomResetButton
@@ -974,8 +978,10 @@ describe('createWorkspace', () => {
     expect(historyForwardButton.getAttribute('aria-label')).toBe(
       '遭遇表 のページ履歴を進む',
     );
+    expect(firstButton.getAttribute('aria-label')).toBe('遭遇表 の最初のページへ移動');
     expect(prevButton.getAttribute('aria-label')).toBe('遭遇表 の前のページへ移動');
     expect(nextButton.getAttribute('aria-label')).toBe('遭遇表 の次のページへ移動');
+    expect(lastButton.getAttribute('aria-label')).toBe('遭遇表 の最後のページへ移動');
     expect(zoomOutButton.getAttribute('aria-label')).toBe('遭遇表 を縮小表示');
     expect(zoomInButton.getAttribute('aria-label')).toBe('遭遇表 を拡大表示');
     expect(zoomResetButton.getAttribute('aria-label')).toBe('遭遇表 の表示倍率をリセット');
@@ -1116,8 +1122,10 @@ describe('createWorkspace', () => {
     const windowElement = workspace.querySelector('.workspace__window');
     const pageInput = workspace.querySelector('.workspace__window-page-input');
     const pageForm = workspace.querySelector('.workspace__window-page');
+    const firstButton = workspace.querySelector('.workspace__window-nav--first');
     const prevButton = workspace.querySelector('.workspace__window-nav--previous');
     const nextButton = workspace.querySelector('.workspace__window-nav--next');
+    const lastButton = workspace.querySelector('.workspace__window-nav--last');
     const historyBackButton = workspace.querySelector('.workspace__window-nav--history-back');
     const historyForwardButton = workspace.querySelector(
       '.workspace__window-nav--history-forward',
@@ -1127,8 +1135,10 @@ describe('createWorkspace', () => {
       !windowElement ||
       !pageInput ||
       !pageForm ||
+      !firstButton ||
       !prevButton ||
       !nextButton ||
+      !lastButton ||
       !historyBackButton ||
       !historyForwardButton
     ) {
@@ -1138,8 +1148,10 @@ describe('createWorkspace', () => {
     const handler = vi.fn();
     workspace.addEventListener('workspace:window-page-change', handler);
 
+    expect(firstButton.disabled).toBe(true);
     expect(prevButton.disabled).toBe(true);
     expect(nextButton.disabled).toBe(false);
+    expect(lastButton.disabled).toBe(false);
     expect(historyBackButton.disabled).toBe(true);
     expect(historyForwardButton.disabled).toBe(true);
     expect(windowElement.dataset.pageHistoryIndex).toBe('0');
@@ -1154,6 +1166,7 @@ describe('createWorkspace', () => {
     expect(handler.mock.calls[0][0].detail.historyIndex).toBe(1);
     expect(handler.mock.calls[0][0].detail.historyLength).toBe(2);
     expect(pageInput.value).toBe('2');
+    expect(firstButton.disabled).toBe(false);
     expect(prevButton.disabled).toBe(false);
     expect(historyBackButton.disabled).toBe(false);
     expect(historyForwardButton.disabled).toBe(true);
@@ -1179,6 +1192,7 @@ describe('createWorkspace', () => {
     expect(handler.mock.calls[2][0].detail.historyIndex).toBe(3);
     expect(handler.mock.calls[2][0].detail.historyLength).toBe(4);
     expect(pageInput.value).toBe('4');
+    expect(firstButton.disabled).toBe(false);
     expect(windowElement.dataset.pageHistoryIndex).toBe('3');
     expect(windowElement.dataset.pageHistoryLength).toBe('4');
     expect(historyBackButton.disabled).toBe(false);
@@ -1197,6 +1211,57 @@ describe('createWorkspace', () => {
     expect(state.pageHistory).toEqual([1, 2, 5, 4]);
     expect(state.pageHistoryIndex).toBe(3);
     expect(state.color).toBe('neutral');
+  });
+
+  it('jumps directly to the first or last page from toolbar controls', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['bounds'], 'bounds.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file, { totalPages: 5 });
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const pageInput = workspace.querySelector('.workspace__window-page-input');
+    const firstButton = workspace.querySelector('.workspace__window-nav--first');
+    const lastButton = workspace.querySelector('.workspace__window-nav--last');
+
+    if (!windowElement || !pageInput || !firstButton || !lastButton) {
+      throw new Error('boundary navigation controls are required for the test');
+    }
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-page-change', handler);
+
+    expect(pageInput.value).toBe('1');
+    expect(firstButton.disabled).toBe(true);
+    expect(lastButton.disabled).toBe(false);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('0');
+    expect(windowElement.dataset.pageHistoryLength).toBe('1');
+
+    lastButton.click();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].detail.page).toBe(5);
+    expect(handler.mock.calls[0][0].detail.totalPages).toBe(5);
+    expect(handler.mock.calls[0][0].detail.historyIndex).toBe(1);
+    expect(handler.mock.calls[0][0].detail.historyLength).toBe(2);
+    expect(pageInput.value).toBe('5');
+    expect(firstButton.disabled).toBe(false);
+    expect(lastButton.disabled).toBe(true);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('1');
+    expect(windowElement.dataset.pageHistoryLength).toBe('2');
+
+    firstButton.click();
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler.mock.calls[1][0].detail.page).toBe(1);
+    expect(handler.mock.calls[1][0].detail.totalPages).toBe(5);
+    expect(handler.mock.calls[1][0].detail.historyIndex).toBe(2);
+    expect(handler.mock.calls[1][0].detail.historyLength).toBe(3);
+    expect(pageInput.value).toBe('1');
+    expect(firstButton.disabled).toBe(true);
+    expect(lastButton.disabled).toBe(false);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('2');
+    expect(windowElement.dataset.pageHistoryLength).toBe('3');
   });
 
   it('navigates page history backward, forward, and trims stale entries', async () => {
@@ -1320,12 +1385,36 @@ describe('createWorkspace', () => {
     expect(windowElement.dataset.pageHistoryIndex).toBe('2');
     expect(windowElement.dataset.pageHistoryLength).toBe('3');
 
+    windowElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(3);
+    expect(handler.mock.calls[2][0].detail.page).toBe(3);
+    expect(handler.mock.calls[2][0].detail.totalPages).toBe(3);
+    expect(handler.mock.calls[2][0].detail.historyIndex).toBe(3);
+    expect(handler.mock.calls[2][0].detail.historyLength).toBe(4);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('3');
+    expect(windowElement.dataset.pageHistoryLength).toBe('4');
+
+    windowElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(4);
+    expect(handler.mock.calls[3][0].detail.page).toBe(1);
+    expect(handler.mock.calls[3][0].detail.totalPages).toBe(3);
+    expect(handler.mock.calls[3][0].detail.historyIndex).toBe(4);
+    expect(handler.mock.calls[3][0].detail.historyLength).toBe(5);
+    expect(windowElement.dataset.pageHistoryIndex).toBe('4');
+    expect(windowElement.dataset.pageHistoryLength).toBe('5');
+
     pageInput.focus();
     pageInput.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
     );
 
-    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenCalledTimes(4);
+
+    pageInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+
+    expect(handler).toHaveBeenCalledTimes(4);
   });
 
   it('supports keyboard zoom shortcuts when the window is focused', async () => {
