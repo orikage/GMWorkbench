@@ -25,6 +25,7 @@ const WINDOW_PAGE_CHANGE_EVENT = 'workspace:window-page-change';
 const WINDOW_ZOOM_CHANGE_EVENT = 'workspace:window-zoom-change';
 const WINDOW_DUPLICATE_EVENT = 'workspace:window-duplicate';
 const WINDOW_NOTES_CHANGE_EVENT = 'workspace:window-notes-change';
+const WINDOW_TITLE_CHANGE_EVENT = 'workspace:window-title-change';
 const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
@@ -398,7 +399,6 @@ function createWindowCanvas() {
     const windowElement = document.createElement('article');
     windowElement.className = 'workspace__window';
     windowElement.setAttribute('role', 'group');
-    windowElement.setAttribute('aria-label', `${file.name} のウィンドウ`);
     windowElement.tabIndex = 0;
 
     const offsetIndex = area.children.length;
@@ -450,6 +450,15 @@ function createWindowCanvas() {
     let notesContent = typeof options.notes === 'string' ? options.notes : '';
     let notesTextarea;
     let notesCounter;
+    let resizeHandle;
+    const defaultTitle = file.name;
+    let windowTitle =
+      typeof options.title === 'string' && options.title.trim().length > 0
+        ? options.title.trim()
+        : defaultTitle;
+    let titleInput;
+    let renameButton;
+    let editingTitle = false;
 
     const viewer = createPdfViewer(file);
     let disposed = false;
@@ -526,6 +535,7 @@ function createWindowCanvas() {
         pinned: windowElement.classList.contains('workspace__window--pinned'),
         openedAt,
         lastFocusedAt,
+        title: windowTitle,
         notes: notesContent,
       };
 
@@ -785,19 +795,39 @@ function createWindowCanvas() {
     const header = document.createElement('header');
     header.className = 'workspace__window-header';
 
+    const titleGroup = document.createElement('div');
+    titleGroup.className = 'workspace__window-title-group';
+
     const title = document.createElement('h3');
     title.className = 'workspace__window-title';
-    title.textContent = file.name;
+
+    title.textContent = windowTitle;
+
+    titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'workspace__window-title-input';
+    titleInput.maxLength = 120;
+    titleInput.hidden = true;
+    titleInput.setAttribute('aria-label', 'ウィンドウタイトルを編集');
+    titleInput.value = windowTitle;
+    titleInput.placeholder = windowTitle;
+
+    titleGroup.append(title, titleInput);
 
     const controls = document.createElement('div');
     controls.className = 'workspace__window-controls';
+
+    renameButton = document.createElement('button');
+    renameButton.type = 'button';
+    renameButton.className = 'workspace__window-rename';
+    renameButton.textContent = '名称変更';
+    renameButton.setAttribute('aria-label', `${windowTitle} のタイトルを変更`);
 
     const pinButton = document.createElement('button');
     pinButton.type = 'button';
     pinButton.className = 'workspace__window-pin';
     pinButton.textContent = 'ピン留め';
     pinButton.setAttribute('aria-pressed', 'false');
-    pinButton.setAttribute('aria-label', `${file.name} を前面に固定`);
 
     const updatePinVisualState = (pinned) => {
       windowElement.classList.toggle('workspace__window--pinned', pinned);
@@ -821,7 +851,144 @@ function createWindowCanvas() {
     duplicateButton.type = 'button';
     duplicateButton.className = 'workspace__window-duplicate';
     duplicateButton.textContent = '複製';
-    duplicateButton.setAttribute('aria-label', `${file.name} を別ウィンドウで複製`);
+    duplicateButton.setAttribute('aria-label', `${windowTitle} を別ウィンドウで複製`);
+    const syncControlLabels = () => {
+      const windowLabel = `${windowTitle} のウィンドウ`;
+      windowElement.setAttribute('aria-label', windowLabel);
+
+      pinButton.setAttribute('aria-label', `${windowTitle} を前面に固定`);
+      duplicateButton.setAttribute('aria-label', `${windowTitle} を別ウィンドウで複製`);
+
+      if (notesTextarea) {
+        notesTextarea.setAttribute('aria-label', `${windowTitle} のメモ`);
+      }
+
+      if (pageForm) {
+        pageForm.setAttribute('aria-label', `${windowTitle} の表示ページを設定`);
+      }
+
+      if (pageInput) {
+        pageInput.setAttribute('aria-label', `${windowTitle} の表示ページ番号`);
+      }
+
+      if (prevButton) {
+        prevButton.setAttribute('aria-label', `${windowTitle} の前のページへ移動`);
+      }
+
+      if (nextButton) {
+        nextButton.setAttribute('aria-label', `${windowTitle} の次のページへ移動`);
+      }
+
+      if (zoomOutButton) {
+        zoomOutButton.setAttribute('aria-label', `${windowTitle} を縮小表示`);
+      }
+
+      if (zoomInButton) {
+        zoomInButton.setAttribute('aria-label', `${windowTitle} を拡大表示`);
+      }
+
+      if (zoomResetButton) {
+        zoomResetButton.setAttribute('aria-label', `${windowTitle} の表示倍率をリセット`);
+      }
+
+      if (resizeHandle) {
+        resizeHandle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
+      }
+    };
+
+    const syncWindowTitleDisplay = () => {
+      title.textContent = windowTitle;
+
+      if (!editingTitle) {
+        titleInput.value = windowTitle;
+      }
+
+      titleInput.placeholder = windowTitle;
+      windowElement.dataset.windowTitle = windowTitle;
+      syncControlLabels();
+    };
+
+    const finishTitleEdit = ({ commit }) => {
+      if (!editingTitle) {
+        return;
+      }
+
+      const previousTitle = windowTitle;
+      editingTitle = false;
+      windowElement.classList.remove('workspace__window--renaming');
+      title.hidden = false;
+      titleInput.hidden = true;
+
+      if (commit) {
+        const rawValue = typeof titleInput.value === 'string' ? titleInput.value.trim() : '';
+        windowTitle = rawValue.length > 0 ? rawValue : defaultTitle;
+      } else {
+        titleInput.value = windowTitle;
+      }
+
+      renameButton.textContent = '名称変更';
+      renameButton.setAttribute('aria-label', `${windowTitle} のタイトルを変更`);
+
+      syncWindowTitleDisplay();
+
+      if (commit && windowTitle !== previousTitle) {
+        const titleEvent = new CustomEvent(WINDOW_TITLE_CHANGE_EVENT, {
+          bubbles: true,
+          detail: { file, title: windowTitle },
+        });
+
+        windowElement.dispatchEvent(titleEvent);
+        bringToFront();
+        schedulePersist();
+      }
+    };
+
+    const startTitleEdit = () => {
+      if (editingTitle) {
+        return;
+      }
+
+      editingTitle = true;
+      windowElement.classList.add('workspace__window--renaming');
+      title.hidden = true;
+      titleInput.hidden = false;
+      titleInput.value = windowTitle;
+      renameButton.textContent = '保存';
+      renameButton.setAttribute('aria-label', `${windowTitle} のタイトルを保存`);
+
+      queueMicrotask(() => {
+        titleInput.focus({ preventScroll: true });
+        titleInput.select();
+      });
+    };
+
+    renameButton.addEventListener('click', () => {
+      bringToFront();
+
+      if (!editingTitle) {
+        startTitleEdit();
+        return;
+      }
+
+      finishTitleEdit({ commit: true });
+    });
+
+    titleInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        finishTitleEdit({ commit: true });
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        finishTitleEdit({ commit: false });
+      }
+    });
+
+    titleInput.addEventListener('blur', () => {
+      finishTitleEdit({ commit: true });
+    });
+
     duplicateButton.addEventListener('click', () => {
       const currentLeft = parsePixels(windowElement.style.left, initialLeft);
       const currentTop = parsePixels(windowElement.style.top, initialTop);
@@ -846,6 +1013,7 @@ function createWindowCanvas() {
         totalPages,
         pinned: isPinned(),
         notes: notesContent,
+        title: windowTitle,
       });
 
       if (!duplicateElement) {
@@ -862,6 +1030,7 @@ function createWindowCanvas() {
           sourceId: windowId,
           duplicateId: duplicateElement.dataset?.windowId,
           notes: notesContent,
+          title: windowTitle,
         },
       });
 
@@ -876,8 +1045,8 @@ function createWindowCanvas() {
       disposeWindow();
     });
 
-    controls.append(pinButton, duplicateButton, closeButton);
-    header.append(title, controls);
+    controls.append(renameButton, pinButton, duplicateButton, closeButton);
+    header.append(titleGroup, controls);
 
     const body = document.createElement('div');
     body.className = 'workspace__window-body';
@@ -909,7 +1078,6 @@ function createWindowCanvas() {
     notesTextarea.rows = 4;
     notesTextarea.placeholder = 'シーンの補足やアドリブ案をメモできます。';
     notesTextarea.value = notesContent;
-    notesTextarea.setAttribute('aria-label', `${file.name} のメモ`);
     notesTextarea.addEventListener('focus', () => {
       bringToFront();
     });
@@ -935,7 +1103,6 @@ function createWindowCanvas() {
 
     const pageForm = document.createElement('form');
     pageForm.className = 'workspace__window-page';
-    pageForm.setAttribute('aria-label', `${file.name} の表示ページを設定`);
 
     const requestPageChange = () => {
       if (!pageInput) {
@@ -974,7 +1141,6 @@ function createWindowCanvas() {
     pageInput.id = pageInputId;
     pageInput.className = 'workspace__window-page-input';
     pageInput.value = String(currentPage);
-    pageInput.setAttribute('aria-label', `${file.name} の表示ページ番号`);
     pageInput.addEventListener('change', requestPageChange);
     pageInput.addEventListener('blur', syncNavigationState);
     pageInput.addEventListener('focus', () => {
@@ -986,7 +1152,6 @@ function createWindowCanvas() {
     prevButton.type = 'button';
     prevButton.className = 'workspace__window-nav workspace__window-nav--previous';
     prevButton.textContent = '−';
-    prevButton.setAttribute('aria-label', `${file.name} の前のページへ移動`);
     prevButton.addEventListener('click', () => {
       stepPage(-1);
     });
@@ -995,7 +1160,6 @@ function createWindowCanvas() {
     nextButton.type = 'button';
     nextButton.className = 'workspace__window-nav workspace__window-nav--next';
     nextButton.textContent = '+';
-    nextButton.setAttribute('aria-label', `${file.name} の次のページへ移動`);
     nextButton.addEventListener('click', () => {
       stepPage(1);
     });
@@ -1009,7 +1173,6 @@ function createWindowCanvas() {
     zoomOutButton.type = 'button';
     zoomOutButton.className = 'workspace__window-zoom-control workspace__window-zoom-control--out';
     zoomOutButton.textContent = '縮小';
-    zoomOutButton.setAttribute('aria-label', `${file.name} を縮小表示`);
     zoomOutButton.addEventListener('click', () => {
       stepZoom(-WINDOW_ZOOM_STEP);
     });
@@ -1022,7 +1185,6 @@ function createWindowCanvas() {
     zoomInButton.type = 'button';
     zoomInButton.className = 'workspace__window-zoom-control workspace__window-zoom-control--in';
     zoomInButton.textContent = '拡大';
-    zoomInButton.setAttribute('aria-label', `${file.name} を拡大表示`);
     zoomInButton.addEventListener('click', () => {
       stepZoom(WINDOW_ZOOM_STEP);
     });
@@ -1031,7 +1193,6 @@ function createWindowCanvas() {
     zoomResetButton.type = 'button';
     zoomResetButton.className = 'workspace__window-zoom-reset';
     zoomResetButton.textContent = '100%';
-    zoomResetButton.setAttribute('aria-label', `${file.name} の表示倍率をリセット`);
     zoomResetButton.addEventListener('click', () => {
       resetZoom();
     });
@@ -1064,6 +1225,18 @@ function createWindowCanvas() {
     windowElement.append(header, body);
 
     const handleMouseDown = (event) => {
+      if (
+        event.target instanceof HTMLElement &&
+        (event.target.closest('.workspace__window-title-input') ||
+          event.target.closest('.workspace__window-rename'))
+      ) {
+        return;
+      }
+
+      if (editingTitle) {
+        return;
+      }
+
       bringToFront();
       event.preventDefault();
 
@@ -1098,7 +1271,15 @@ function createWindowCanvas() {
       bringToFront();
     });
     windowElement.addEventListener('mousedown', (event) => {
-      if (event.target instanceof HTMLElement && event.target.closest('button')) {
+      if (
+        event.target instanceof HTMLElement &&
+        (event.target.closest('button') ||
+          event.target.closest('.workspace__window-title-input'))
+      ) {
+        return;
+      }
+
+      if (editingTitle) {
         return;
       }
 
@@ -1150,10 +1331,9 @@ function createWindowCanvas() {
       }
     });
 
-    const resizeHandle = document.createElement('button');
+    resizeHandle = document.createElement('button');
     resizeHandle.type = 'button';
     resizeHandle.className = 'workspace__window-resize';
-    resizeHandle.setAttribute('aria-label', `${file.name} のウィンドウサイズを変更`);
 
     const handleResizeStart = (event) => {
       event.preventDefault();
@@ -1206,6 +1386,8 @@ function createWindowCanvas() {
     };
 
     resizeHandle.addEventListener('mousedown', handleResizeStart);
+
+    syncWindowTitleDisplay();
 
     if (options.pinned === true) {
       updatePinVisualState(true);

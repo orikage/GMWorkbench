@@ -198,6 +198,7 @@ describe('createWorkspace', () => {
         lastFocusedAt: 20,
         persisted: true,
         notes: '復元メモ',
+        title: '永続ウィンドウ',
       },
     ]);
 
@@ -216,6 +217,10 @@ describe('createWorkspace', () => {
     expect(windowElement?.style.top).toBe('64px');
     expect(windowElement?.style.width).toBe('512px');
     expect(windowElement?.style.height).toBe('420px');
+    expect(windowElement?.dataset.windowTitle).toBe('永続ウィンドウ');
+
+    const restoredTitle = workspace.querySelector('.workspace__window-title');
+    expect(restoredTitle?.textContent).toBe('永続ウィンドウ');
 
     const pageInput = workspace.querySelector('.workspace__window-page-input');
     const zoomDisplay = workspace.querySelector('.workspace__window-zoom-display');
@@ -732,8 +737,20 @@ describe('createWorkspace', () => {
     const duplicateButton = windowElement.querySelector('.workspace__window-duplicate');
     const pinButton = windowElement.querySelector('.workspace__window-pin');
     const notesInput = windowElement.querySelector('.workspace__window-notes-input');
+    const renameButton = windowElement.querySelector('.workspace__window-rename');
+    const titleInput = windowElement.querySelector('.workspace__window-title-input');
+    const titleLabel = windowElement.querySelector('.workspace__window-title');
 
-    if (!pageInput || !zoomInButton || !duplicateButton || !pinButton || !notesInput) {
+    if (
+      !pageInput ||
+      !zoomInButton ||
+      !duplicateButton ||
+      !pinButton ||
+      !notesInput ||
+      !renameButton ||
+      !titleInput ||
+      !titleLabel
+    ) {
       throw new Error('duplicate control structure is incomplete');
     }
 
@@ -751,6 +768,15 @@ describe('createWorkspace', () => {
     notesInput.dispatchEvent(new Event('input', { bubbles: true }));
     await flushPromises();
 
+    renameButton.click();
+    await flushPromises();
+
+    titleInput.value = '魔王討伐計画';
+    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+    renameButton.click();
+
+    await flushPromises();
+
     const duplicateHandler = vi.fn();
     workspace.addEventListener('workspace:window-duplicate', duplicateHandler);
 
@@ -766,6 +792,7 @@ describe('createWorkspace', () => {
     const originalViewer = originalWindow.querySelector('.workspace__window-viewer');
     const duplicateViewer = duplicateWindow?.querySelector('.workspace__window-viewer');
     const duplicateNotes = duplicateWindow?.querySelector('.workspace__window-notes-input');
+    const duplicateTitle = duplicateWindow?.querySelector('.workspace__window-title');
 
     expect(originalViewer?.dataset.page).toBe('3');
     expect(originalViewer?.dataset.zoom).toBe('1.1');
@@ -773,6 +800,10 @@ describe('createWorkspace', () => {
     expect(duplicateViewer?.dataset.zoom).toBe('1.1');
     expect(duplicateNotes?.value).toBe('魔王城の罠メモ');
     expect(duplicateWindow?.dataset.notesLength).toBe(String('魔王城の罠メモ'.length));
+    expect(originalWindow.dataset.windowTitle).toBe('魔王討伐計画');
+    expect(duplicateWindow?.dataset.windowTitle).toBe('魔王討伐計画');
+    expect(titleLabel.textContent).toBe('魔王討伐計画');
+    expect(duplicateTitle?.textContent).toBe('魔王討伐計画');
 
     expect(duplicateWindow?.classList.contains('workspace__window--pinned')).toBe(true);
 
@@ -793,6 +824,100 @@ describe('createWorkspace', () => {
     expect(detail.sourceId).toBe(originalWindow.dataset.windowId);
     expect(detail.duplicateId).toBe(duplicateWindow?.dataset.windowId);
     expect(detail.notes).toBe('魔王城の罠メモ');
+    expect(detail.title).toBe('魔王討伐計画');
+  });
+
+  it('renames windows, updates metadata, and persists the new title', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['rename'], 'rename.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const renameButton = workspace.querySelector('.workspace__window-rename');
+    const titleInput = workspace.querySelector('.workspace__window-title-input');
+    const titleLabel = workspace.querySelector('.workspace__window-title');
+    const pinButton = workspace.querySelector('.workspace__window-pin');
+    const duplicateButton = workspace.querySelector('.workspace__window-duplicate');
+    const notesInput = workspace.querySelector('.workspace__window-notes-input');
+    const pageForm = workspace.querySelector('.workspace__window-page');
+    const pageInput = workspace.querySelector('.workspace__window-page-input');
+    const zoomOutButton = workspace.querySelector('.workspace__window-zoom-control--out');
+    const zoomInButton = workspace.querySelector('.workspace__window-zoom-control--in');
+    const zoomResetButton = workspace.querySelector('.workspace__window-zoom-reset');
+
+    if (
+      !windowElement ||
+      !renameButton ||
+      !titleInput ||
+      !titleLabel ||
+      !pinButton ||
+      !duplicateButton ||
+      !notesInput ||
+      !pageForm ||
+      !pageInput ||
+      !zoomOutButton ||
+      !zoomInButton ||
+      !zoomResetButton
+    ) {
+      throw new Error('rename controls must exist for the test');
+    }
+
+    storageMocks.persist.mockClear();
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-title-change', handler);
+
+    renameButton.click();
+    await flushPromises();
+
+    titleInput.value = '遭遇表';
+    titleInput.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].detail.title).toBe('遭遇表');
+    expect(windowElement.dataset.windowTitle).toBe('遭遇表');
+    expect(titleLabel.textContent).toBe('遭遇表');
+    expect(titleInput.placeholder).toBe('遭遇表');
+    expect(windowElement.getAttribute('aria-label')).toBe('遭遇表 のウィンドウ');
+    expect(pinButton.getAttribute('aria-label')).toBe('遭遇表 を前面に固定');
+    expect(duplicateButton.getAttribute('aria-label')).toBe('遭遇表 を別ウィンドウで複製');
+    expect(notesInput.getAttribute('aria-label')).toBe('遭遇表 のメモ');
+    expect(pageForm.getAttribute('aria-label')).toBe('遭遇表 の表示ページを設定');
+    expect(pageInput.getAttribute('aria-label')).toBe('遭遇表 の表示ページ番号');
+    expect(zoomOutButton.getAttribute('aria-label')).toBe('遭遇表 を縮小表示');
+    expect(zoomInButton.getAttribute('aria-label')).toBe('遭遇表 を拡大表示');
+    expect(zoomResetButton.getAttribute('aria-label')).toBe('遭遇表 の表示倍率をリセット');
+    expect(renameButton.textContent).toBe('名称変更');
+
+    const renamePersist =
+      storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
+
+    if (!renamePersist) {
+      throw new Error('rename persistence call is required');
+    }
+
+    expect(renamePersist[0].title).toBe('遭遇表');
+
+    renameButton.click();
+    await flushPromises();
+
+    titleInput.value = '   ';
+    titleInput.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+
+    await flushPromises();
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler.mock.calls[1][0].detail.title).toBe('rename.pdf');
+    expect(windowElement.dataset.windowTitle).toBe('rename.pdf');
+    expect(titleLabel.textContent).toBe('rename.pdf');
+    expect(renameButton.textContent).toBe('名称変更');
   });
 
   it('captures notes input, emits updates, and persists content', async () => {

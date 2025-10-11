@@ -117,6 +117,10 @@ function normalizeForStorage(state) {
     normalized.lastFocusedAt = state.lastFocusedAt;
   }
 
+  if (typeof state.title === 'string' && state.title.length > 0) {
+    normalized.title = state.title;
+  }
+
   if (typeof state.notes === 'string') {
     normalized.notes = state.notes;
   }
@@ -207,6 +211,7 @@ function normalizeFromStorage(record) {
     lastFocusedAt: Number.isFinite(record.lastFocusedAt)
       ? record.lastFocusedAt
       : undefined,
+    title: typeof record.title === 'string' ? record.title : undefined,
     notes: typeof record.notes === 'string' ? record.notes : '',
     persisted: true,
   };

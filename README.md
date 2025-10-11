@@ -55,8 +55,9 @@ pnpm docs:print:decisions
 - `workspace:window-pin-toggle` — ウィンドウのピン留め状態を切り替えたとき。
 - `workspace:window-page-change` — ページ入力やナビゲーション、キーボード操作で表示ページが変わったとき。詳細には `page` と `totalPages` を含む。
 - `workspace:window-zoom-change` — ウィンドウの倍率を拡大・縮小・リセットしたとき。詳細には `zoom` (0.5〜2.0) と現在の `page` を含む。
-- `workspace:window-duplicate` — ウィンドウの「複製」を押したとき。`page`, `zoom`, `totalPages`, `sourceId`, `duplicateId` を併せて通知する。
+- `workspace:window-duplicate` — ウィンドウの「複製」を押したとき。`page`, `zoom`, `totalPages`, `sourceId`, `duplicateId`, `title` を併せて通知する。
 - `workspace:window-notes-change` — ウィンドウ内のメモが更新されたとき。`detail.notes` に最新テキストを含む。
+- `workspace:window-title-change` — ウィンドウタイトルが保存されたとき。`detail.title` に確定したタイトルを含む。
 - `workspace:cache-cleared` — メンテナンス操作で保存済みデータを削除したとき。`detail.windowsCleared` に閉じたウィンドウ件数が入ります。
 
 ## PDFビューア統合
@@ -84,6 +85,12 @@ pnpm docs:print:decisions
 - 各ウィンドウ下部にメモ欄を配置し、シーンの補足やアドリブ案をすぐに書き留められます。
 - 入力内容は `workspace:window-notes-change` で通知され、`data-notes-length` 属性から文字数を取得できます。
 - 内容は永続化対象に含まれるため、ページやズームと同様にリロード後も維持されます。
+
+## ウィンドウタイトル編集
+
+- ヘッダーの「名称変更」ボタンからタイトルを編集でき、Enter で確定・Escape でキャンセルできます。空のまま確定すると元のファイル名に戻ります。
+- 確定時には `workspace:window-title-change` を発火し、`data-window-title` 属性と各種 `aria-label` が最新タイトルと同期されます。
+- 設定したタイトルは永続化され、複製やセッション復元でも引き継がれます。
 
 ## キーボードショートカット
 
