@@ -216,6 +216,8 @@ describe('createWorkspace', () => {
     expect(storageMocks.load).toHaveBeenCalledTimes(1);
 
     const windowElement = workspace.querySelector('.workspace__window');
+    const maximizeButton = workspace.querySelector('.workspace__window-maximize');
+    const resizeHandle = workspace.querySelector('.workspace__window-resize');
 
     expect(windowElement).not.toBeNull();
     expect(windowElement?.classList.contains('workspace__window--pinned')).toBe(true);
@@ -242,9 +244,65 @@ describe('createWorkspace', () => {
     expect(notesField?.value).toBe('復元メモ');
     expect(notesCounter?.textContent).toBe(`${'復元メモ'.length}文字`);
     expect(windowElement?.dataset.notesLength).toBe(String('復元メモ'.length));
+    expect(windowElement?.dataset.windowMaximized).toBe('false');
+    expect(maximizeButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(resizeHandle?.disabled).toBe(false);
 
     const activeWindow = workspace.querySelector('.workspace__window--active');
     expect(activeWindow).toBe(windowElement);
+  });
+
+  it('restores maximized windows and disables manual layout controls', async () => {
+    const persistedFile = new File(['max'], 'maximized.pdf', {
+      type: 'application/pdf',
+      lastModified: 789,
+    });
+
+    storageMocks.load.mockResolvedValue([
+      {
+        id: 'max-window',
+        file: persistedFile,
+        page: 1,
+        zoom: 1,
+        left: 128,
+        top: 96,
+        width: 520,
+        height: 400,
+        maximized: true,
+        restoreLeft: 128,
+        restoreTop: 96,
+        restoreWidth: 520,
+        restoreHeight: 400,
+        title: '最大ウィンドウ',
+        persisted: true,
+      },
+    ]);
+
+    const workspace = createWorkspace();
+
+    await flushPromises();
+    await flushPromises();
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const maximizeButton = workspace.querySelector('.workspace__window-maximize');
+    const resizeHandle = workspace.querySelector('.workspace__window-resize');
+
+    expect(windowElement).not.toBeNull();
+    expect(maximizeButton).not.toBeNull();
+    expect(resizeHandle).not.toBeNull();
+
+    expect(windowElement?.classList.contains('workspace__window--maximized')).toBe(true);
+    expect(windowElement?.dataset.windowMaximized).toBe('true');
+    expect(windowElement?.style.left).toBe('0px');
+    expect(windowElement?.style.top).toBe('0px');
+    expect(windowElement?.style.width).toBe('960px');
+    expect(windowElement?.style.height).toBe('640px');
+    expect(windowElement?.dataset.windowTitle).toBe('最大ウィンドウ');
+    expect(maximizeButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(maximizeButton?.textContent).toBe('縮小');
+    expect(maximizeButton?.getAttribute('aria-label')).toBe('最大ウィンドウ を元のサイズに戻す');
+    expect(resizeHandle?.disabled).toBe(true);
+    expect(resizeHandle?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('restores stored page history metadata and keeps navigation controls aligned', async () => {
@@ -884,6 +942,7 @@ describe('createWorkspace', () => {
     expect(duplicateWindow?.dataset.windowTitle).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.windowColor).toBe('emerald');
     expect(duplicateWindow?.dataset.rotation).toBe('270');
+    expect(duplicateWindow?.dataset.windowMaximized).toBe('false');
     expect(titleLabel.textContent).toBe('魔王討伐計画');
     expect(duplicateTitle?.textContent).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.pageHistoryLength).toBe(
@@ -916,6 +975,119 @@ describe('createWorkspace', () => {
     expect(detail.notes).toBe('魔王城の罠メモ');
     expect(detail.title).toBe('魔王討伐計画');
     expect(detail.color).toBe('emerald');
+    expect(detail.maximized).toBe(false);
+  });
+
+  it('toggles window maximization, emits events, and persists restore bounds', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['max'], 'max.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const maximizeButton = workspace.querySelector('.workspace__window-maximize');
+    const resizeHandle = workspace.querySelector('.workspace__window-resize');
+
+    if (!windowElement || !maximizeButton || !resizeHandle) {
+      throw new Error('maximize controls must exist for the test');
+    }
+
+    const parsePixels = (value) => Number.parseFloat(value ?? '0');
+    const initialLeft = parsePixels(windowElement.style.left);
+    const initialTop = parsePixels(windowElement.style.top);
+    const initialWidth = parsePixels(windowElement.style.width);
+    const initialHeight = parsePixels(windowElement.style.height);
+
+    const maximizeHandler = vi.fn();
+    workspace.addEventListener('workspace:window-maximize-change', maximizeHandler);
+
+    storageMocks.persist.mockClear();
+
+    maximizeButton.click();
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(maximizeHandler).toHaveBeenCalledTimes(1);
+
+    const firstDetail = maximizeHandler.mock.calls[0][0].detail;
+    expect(firstDetail.file).toBe(file);
+    expect(firstDetail.maximized).toBe(true);
+    expect(firstDetail.restoreLeft).toBeCloseTo(initialLeft, 6);
+    expect(firstDetail.restoreTop).toBeCloseTo(initialTop, 6);
+    expect(firstDetail.restoreWidth).toBeCloseTo(initialWidth, 6);
+    expect(firstDetail.restoreHeight).toBeCloseTo(initialHeight, 6);
+    expect(firstDetail.left).toBeCloseTo(0, 6);
+    expect(firstDetail.top).toBeCloseTo(0, 6);
+    expect(windowElement.classList.contains('workspace__window--maximized')).toBe(true);
+    expect(windowElement.dataset.windowMaximized).toBe('true');
+    expect(maximizeButton.getAttribute('aria-pressed')).toBe('true');
+    expect(maximizeButton.textContent).toBe('縮小');
+    expect(resizeHandle.disabled).toBe(true);
+    expect(resizeHandle.getAttribute('aria-hidden')).toBe('true');
+    expect(parsePixels(windowElement.style.left)).toBeCloseTo(0, 6);
+    expect(parsePixels(windowElement.style.top)).toBeCloseTo(0, 6);
+    expect(parsePixels(windowElement.style.width)).toBeGreaterThan(initialWidth);
+    expect(parsePixels(windowElement.style.height)).toBeGreaterThan(initialHeight);
+
+    expect(storageMocks.persist).toHaveBeenCalled();
+
+    const firstPersist =
+      storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
+
+    if (!firstPersist) {
+      throw new Error('maximize persistence call is required');
+    }
+
+    expect(firstPersist[0].maximized).toBe(true);
+    expect(firstPersist[0].restoreLeft).toBeCloseTo(initialLeft, 6);
+    expect(firstPersist[0].restoreTop).toBeCloseTo(initialTop, 6);
+    expect(firstPersist[0].restoreWidth).toBeCloseTo(initialWidth, 6);
+    expect(firstPersist[0].restoreHeight).toBeCloseTo(initialHeight, 6);
+
+    storageMocks.persist.mockClear();
+    maximizeHandler.mockClear();
+
+    maximizeButton.click();
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(maximizeHandler).toHaveBeenCalledTimes(1);
+
+    const secondDetail = maximizeHandler.mock.calls[0][0].detail;
+    expect(secondDetail.maximized).toBe(false);
+    expect(secondDetail.left).toBeCloseTo(initialLeft, 6);
+    expect(secondDetail.top).toBeCloseTo(initialTop, 6);
+    expect(secondDetail.restoreLeft).toBeCloseTo(initialLeft, 6);
+    expect(secondDetail.restoreTop).toBeCloseTo(initialTop, 6);
+    expect(secondDetail.restoreWidth).toBeCloseTo(initialWidth, 6);
+    expect(secondDetail.restoreHeight).toBeCloseTo(initialHeight, 6);
+    expect(windowElement.classList.contains('workspace__window--maximized')).toBe(false);
+    expect(windowElement.dataset.windowMaximized).toBe('false');
+    expect(maximizeButton.getAttribute('aria-pressed')).toBe('false');
+    expect(maximizeButton.textContent).toBe('最大化');
+    expect(resizeHandle.disabled).toBe(false);
+    expect(resizeHandle.getAttribute('aria-hidden')).toBe('false');
+    expect(windowElement.style.left).toBe(`${initialLeft}px`);
+    expect(windowElement.style.top).toBe(`${initialTop}px`);
+    expect(windowElement.style.width).toBe(`${initialWidth}px`);
+    expect(windowElement.style.height).toBe(`${initialHeight}px`);
+
+    expect(storageMocks.persist).toHaveBeenCalled();
+
+    const secondPersist =
+      storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
+
+    if (!secondPersist) {
+      throw new Error('restore persistence call is required');
+    }
+
+    expect(secondPersist[0].maximized).toBe(false);
+    expect(secondPersist[0].restoreLeft).toBeCloseTo(initialLeft, 6);
+    expect(secondPersist[0].restoreTop).toBeCloseTo(initialTop, 6);
+    expect(secondPersist[0].restoreWidth).toBeCloseTo(initialWidth, 6);
+    expect(secondPersist[0].restoreHeight).toBeCloseTo(initialHeight, 6);
   });
 
   it('renames windows, updates metadata, and persists the new title', async () => {
@@ -930,6 +1102,7 @@ describe('createWorkspace', () => {
     const titleLabel = workspace.querySelector('.workspace__window-title');
     const pinButton = workspace.querySelector('.workspace__window-pin');
     const duplicateButton = workspace.querySelector('.workspace__window-duplicate');
+    const maximizeButton = workspace.querySelector('.workspace__window-maximize');
     const colorButton = workspace.querySelector('.workspace__window-color');
     const notesInput = workspace.querySelector('.workspace__window-notes-input');
     const pageForm = workspace.querySelector('.workspace__window-page');
@@ -961,6 +1134,7 @@ describe('createWorkspace', () => {
       !titleLabel ||
       !pinButton ||
       !duplicateButton ||
+      !maximizeButton ||
       !colorButton ||
       !notesInput ||
       !pageForm ||
@@ -1005,6 +1179,7 @@ describe('createWorkspace', () => {
     expect(windowElement.getAttribute('aria-label')).toBe('遭遇表 のウィンドウ');
     expect(pinButton.getAttribute('aria-label')).toBe('遭遇表 を前面に固定');
     expect(duplicateButton.getAttribute('aria-label')).toBe('遭遇表 を別ウィンドウで複製');
+    expect(maximizeButton.getAttribute('aria-label')).toBe('遭遇表 を最大化');
     expect(colorButton.getAttribute('aria-label')).toBe('遭遇表 の色を切り替え (現在: 標準)');
     expect(notesInput.getAttribute('aria-label')).toBe('遭遇表 のメモ');
     expect(pageForm.getAttribute('aria-label')).toBe('遭遇表 の表示ページを設定');
@@ -1023,6 +1198,8 @@ describe('createWorkspace', () => {
     expect(rotationLeftButton.getAttribute('aria-label')).toBe('遭遇表 を反時計回りに回転');
     expect(rotationRightButton.getAttribute('aria-label')).toBe('遭遇表 を時計回りに回転');
     expect(rotationResetButton.getAttribute('aria-label')).toBe('遭遇表 の回転をリセット');
+    expect(maximizeButton.textContent).toBe('最大化');
+    expect(maximizeButton.getAttribute('aria-pressed')).toBe('false');
     expect(renameButton.textContent).toBe('名称変更');
     expect(colorButton.textContent).toBe('色: 標準');
     expect(windowElement.dataset.windowColor).toBe('neutral');

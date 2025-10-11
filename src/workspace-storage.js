@@ -128,6 +128,26 @@ function normalizeForStorage(state) {
     normalized.pinned = state.pinned;
   }
 
+  if (typeof state.maximized === 'boolean') {
+    normalized.maximized = state.maximized;
+  }
+
+  if (Number.isFinite(state.restoreLeft)) {
+    normalized.restoreLeft = state.restoreLeft;
+  }
+
+  if (Number.isFinite(state.restoreTop)) {
+    normalized.restoreTop = state.restoreTop;
+  }
+
+  if (Number.isFinite(state.restoreWidth)) {
+    normalized.restoreWidth = state.restoreWidth;
+  }
+
+  if (Number.isFinite(state.restoreHeight)) {
+    normalized.restoreHeight = state.restoreHeight;
+  }
+
   if (Number.isFinite(state.openedAt)) {
     normalized.openedAt = state.openedAt;
   }
@@ -284,6 +304,11 @@ function normalizeFromStorage(record) {
     rotation: Number.isFinite(record.rotation) ? normalizeRotation(record.rotation) : undefined,
     totalPages: Number.isFinite(record.totalPages) ? record.totalPages : undefined,
     pinned: typeof record.pinned === 'boolean' ? record.pinned : undefined,
+    maximized: typeof record.maximized === 'boolean' ? record.maximized : undefined,
+    restoreLeft: Number.isFinite(record.restoreLeft) ? record.restoreLeft : undefined,
+    restoreTop: Number.isFinite(record.restoreTop) ? record.restoreTop : undefined,
+    restoreWidth: Number.isFinite(record.restoreWidth) ? record.restoreWidth : undefined,
+    restoreHeight: Number.isFinite(record.restoreHeight) ? record.restoreHeight : undefined,
     openedAt: Number.isFinite(record.openedAt) ? record.openedAt : undefined,
     lastFocusedAt: Number.isFinite(record.lastFocusedAt)
       ? record.lastFocusedAt

@@ -28,6 +28,7 @@ const WINDOW_NOTES_CHANGE_EVENT = 'workspace:window-notes-change';
 const WINDOW_TITLE_CHANGE_EVENT = 'workspace:window-title-change';
 const WINDOW_COLOR_CHANGE_EVENT = 'workspace:window-color-change';
 const WINDOW_ROTATION_CHANGE_EVENT = 'workspace:window-rotation-change';
+const WINDOW_MAXIMIZE_CHANGE_EVENT = 'workspace:window-maximize-change';
 const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
@@ -506,6 +507,16 @@ function createWindowCanvas() {
     let notesTextarea;
     let notesCounter;
     let resizeHandle;
+    let maximizeButton;
+    let isMaximized = options.maximized === true;
+    const sanitizeBoundValue = (value, fallback) =>
+      Number.isFinite(value) ? value : fallback;
+    let restoreBounds = {
+      left: sanitizeBoundValue(options.restoreLeft, initialLeft),
+      top: sanitizeBoundValue(options.restoreTop, initialTop),
+      width: sanitizeBoundValue(options.restoreWidth, initialWidth),
+      height: sanitizeBoundValue(options.restoreHeight, initialHeight),
+    };
     const defaultTitle = file.name;
     let windowTitle =
       typeof options.title === 'string' && options.title.trim().length > 0
@@ -542,6 +553,78 @@ function createWindowCanvas() {
 
     const viewer = createPdfViewer(file);
     let disposed = false;
+
+    const emitMaximizeChange = () => {
+      const bounds = getWindowBounds();
+
+      const maximizeEvent = new CustomEvent(WINDOW_MAXIMIZE_CHANGE_EVENT, {
+        bubbles: true,
+        detail: {
+          file,
+          maximized: isMaximized,
+          left: bounds.left,
+          top: bounds.top,
+          width: bounds.width,
+          height: bounds.height,
+          restoreLeft: restoreBounds.left,
+          restoreTop: restoreBounds.top,
+          restoreWidth: restoreBounds.width,
+          restoreHeight: restoreBounds.height,
+        },
+      });
+
+      windowElement.dispatchEvent(maximizeEvent);
+    };
+
+    const syncMaximizeControl = () => {
+      if (!maximizeButton) {
+        return;
+      }
+
+      maximizeButton.textContent = isMaximized ? '縮小' : '最大化';
+      maximizeButton.setAttribute('aria-pressed', isMaximized ? 'true' : 'false');
+    };
+
+    const syncMaximizeState = () => {
+      syncMaximizeControl();
+      windowElement.classList.toggle('workspace__window--maximized', isMaximized);
+      windowElement.dataset.windowMaximized = isMaximized ? 'true' : 'false';
+
+      if (resizeHandle) {
+        resizeHandle.disabled = isMaximized;
+        resizeHandle.setAttribute('aria-hidden', isMaximized ? 'true' : 'false');
+      }
+
+      if (isMaximized) {
+        windowElement.classList.remove('workspace__window--resizing');
+      }
+    };
+
+    const toggleMaximize = () => {
+      bringToFront();
+
+      if (isMaximized) {
+        isMaximized = false;
+        const clamped = clampBounds(restoreBounds);
+        restoreBounds = clamped;
+        applyBounds(clamped);
+        syncMaximizeState();
+        syncControlLabels();
+        refreshRestoreBounds();
+        emitMaximizeChange();
+        schedulePersist();
+        return;
+      }
+
+      refreshRestoreBounds();
+      const { width: areaWidth, height: areaHeight } = getAreaSize();
+      isMaximized = true;
+      applyBounds({ left: 0, top: 0, width: areaWidth, height: areaHeight });
+      syncMaximizeState();
+      syncControlLabels();
+      emitMaximizeChange();
+      schedulePersist();
+    };
 
     const dispatchCloseEvent = () => {
       const closure = new CustomEvent(WINDOW_CLOSE_EVENT, {
@@ -582,10 +665,53 @@ function createWindowCanvas() {
       }
     };
 
-    const getWindowSize = () => ({
-      width: parsePixels(windowElement.style.width, DEFAULT_WINDOW_WIDTH),
-      height: parsePixels(windowElement.style.height, DEFAULT_WINDOW_HEIGHT),
+    const getWindowBounds = () => ({
+      left: parsePixels(windowElement.style.left, initialLeft),
+      top: parsePixels(windowElement.style.top, initialTop),
+      width: parsePixels(windowElement.style.width, initialWidth),
+      height: parsePixels(windowElement.style.height, initialHeight),
     });
+
+    const getWindowSize = () => {
+      const { width, height } = getWindowBounds();
+      return { width, height };
+    };
+
+    const clampBounds = (bounds) => {
+      const { width: areaWidth, height: areaHeight } = getAreaSize();
+      const sanitizedWidth = sanitizeBoundValue(bounds?.width, initialWidth);
+      const sanitizedHeight = sanitizeBoundValue(bounds?.height, initialHeight);
+      const width = Math.min(Math.max(MIN_WINDOW_WIDTH, sanitizedWidth), areaWidth);
+      const height = Math.min(Math.max(MIN_WINDOW_HEIGHT, sanitizedHeight), areaHeight);
+      const sanitizedLeft = sanitizeBoundValue(bounds?.left, initialLeft);
+      const sanitizedTop = sanitizeBoundValue(bounds?.top, initialTop);
+      const maxLeft = Math.max(0, areaWidth - width);
+      const maxTop = Math.max(0, areaHeight - height);
+
+      return {
+        left: Math.min(Math.max(0, sanitizedLeft), maxLeft),
+        top: Math.min(Math.max(0, sanitizedTop), maxTop),
+        width,
+        height,
+      };
+    };
+
+    const applyBounds = ({ left, top, width, height }) => {
+      windowElement.style.left = `${left}px`;
+      windowElement.style.top = `${top}px`;
+      windowElement.style.width = `${width}px`;
+      windowElement.style.height = `${height}px`;
+    };
+
+    const refreshRestoreBounds = () => {
+      if (isMaximized) {
+        return;
+      }
+
+      restoreBounds = clampBounds(getWindowBounds());
+    };
+
+    restoreBounds = clampBounds(restoreBounds);
 
     const clampPosition = (left, top) => {
       const { width: areaWidth, height: areaHeight } = getAreaSize();
@@ -600,6 +726,7 @@ function createWindowCanvas() {
     };
 
     const persistState = async ({ includeFile = false } = {}) => {
+      refreshRestoreBounds();
       const descriptor = {
         id: windowId,
         name: file.name,
@@ -621,6 +748,11 @@ function createWindowCanvas() {
         color: windowColor,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
+        maximized: isMaximized,
+        restoreLeft: restoreBounds.left,
+        restoreTop: restoreBounds.top,
+        restoreWidth: restoreBounds.width,
+        restoreHeight: restoreBounds.height,
       };
 
       if (includeFile) {
@@ -1140,6 +1272,15 @@ function createWindowCanvas() {
       schedulePersist();
     });
 
+    maximizeButton = document.createElement('button');
+    maximizeButton.type = 'button';
+    maximizeButton.className = 'workspace__window-maximize';
+    maximizeButton.textContent = '最大化';
+    maximizeButton.setAttribute('aria-pressed', 'false');
+    maximizeButton.addEventListener('click', () => {
+      toggleMaximize();
+    });
+
     const duplicateButton = document.createElement('button');
     duplicateButton.type = 'button';
     duplicateButton.className = 'workspace__window-duplicate';
@@ -1267,6 +1408,13 @@ function createWindowCanvas() {
         rotateResetButton.setAttribute('aria-label', `${windowTitle} の回転をリセット`);
       }
 
+      if (maximizeButton) {
+        const label = isMaximized
+          ? `${windowTitle} を元のサイズに戻す`
+          : `${windowTitle} を最大化`;
+        maximizeButton.setAttribute('aria-label', label);
+      }
+
       if (resizeHandle) {
         resizeHandle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
       }
@@ -1368,10 +1516,11 @@ function createWindowCanvas() {
     });
 
     duplicateButton.addEventListener('click', () => {
-      const currentLeft = parsePixels(windowElement.style.left, initialLeft);
-      const currentTop = parsePixels(windowElement.style.top, initialTop);
-      const currentWidth = parsePixels(windowElement.style.width, initialWidth);
-      const currentHeight = parsePixels(windowElement.style.height, initialHeight);
+      const baseBounds = isMaximized ? clampBounds(restoreBounds) : getWindowBounds();
+      const currentLeft = baseBounds.left;
+      const currentTop = baseBounds.top;
+      const currentWidth = baseBounds.width;
+      const currentHeight = baseBounds.height;
       const { width: areaWidth, height: areaHeight } = getAreaSize();
 
       const proposedLeft = currentLeft + WINDOW_STACK_OFFSET;
@@ -1396,6 +1545,11 @@ function createWindowCanvas() {
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
         color: windowColor,
+        restoreLeft: currentLeft,
+        restoreTop: currentTop,
+        restoreWidth: currentWidth,
+        restoreHeight: currentHeight,
+        maximized: false,
       });
 
       if (!duplicateElement) {
@@ -1415,6 +1569,7 @@ function createWindowCanvas() {
           notes: notesContent,
           title: windowTitle,
           color: windowColor,
+          maximized: isMaximized,
         },
       });
 
@@ -1429,7 +1584,14 @@ function createWindowCanvas() {
       disposeWindow();
     });
 
-    controls.append(renameButton, colorButton, pinButton, duplicateButton, closeButton);
+    controls.append(
+      renameButton,
+      colorButton,
+      pinButton,
+      maximizeButton,
+      duplicateButton,
+      closeButton,
+    );
     header.append(titleGroup, controls);
 
     const body = document.createElement('div');
@@ -1709,6 +1871,11 @@ function createWindowCanvas() {
       }
 
       bringToFront();
+
+      if (isMaximized) {
+        return;
+      }
+
       event.preventDefault();
 
       const startX = event.clientX;
@@ -1822,6 +1989,10 @@ function createWindowCanvas() {
       event.preventDefault();
       bringToFront();
 
+      if (isMaximized) {
+        return;
+      }
+
       const startX = event.clientX;
       const startY = event.clientY;
       const initialWidthValue = parsePixels(windowElement.style.width, initialWidth);
@@ -1870,6 +2041,16 @@ function createWindowCanvas() {
 
     resizeHandle.addEventListener('mousedown', handleResizeStart);
 
+    windowElement.append(resizeHandle);
+
+    if (isMaximized) {
+      const { width: areaWidth, height: areaHeight } = getAreaSize();
+      applyBounds({ left: 0, top: 0, width: areaWidth, height: areaHeight });
+    } else {
+      refreshRestoreBounds();
+    }
+
+    syncMaximizeState();
     syncWindowColorDisplay();
     syncWindowTitleDisplay();
 
@@ -1877,7 +2058,6 @@ function createWindowCanvas() {
       updatePinVisualState(true);
     }
 
-    windowElement.append(resizeHandle);
     area.append(windowElement);
     windowRegistry.set(windowId, { element: windowElement, bringToFront, dispose: disposeWindow });
 
