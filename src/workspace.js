@@ -14,6 +14,11 @@ const CANVAS_FALLBACK_WIDTH = 960;
 const CANVAS_FALLBACK_HEIGHT = 640;
 const WINDOW_PIN_TOGGLE_EVENT = 'workspace:window-pin-toggle';
 const WINDOW_PAGE_CHANGE_EVENT = 'workspace:window-page-change';
+const WINDOW_ZOOM_CHANGE_EVENT = 'workspace:window-zoom-change';
+const DEFAULT_WINDOW_ZOOM = 1;
+const MIN_WINDOW_ZOOM = 0.5;
+const MAX_WINDOW_ZOOM = 2;
+const WINDOW_ZOOM_STEP = 0.1;
 
 function createHeader() {
   const header = document.createElement('header');
@@ -290,6 +295,11 @@ function createWindowCanvas() {
     let pageInput;
     let prevButton;
     let nextButton;
+    let zoomOutButton;
+    let zoomInButton;
+    let zoomResetButton;
+    let zoomDisplay;
+    let currentZoom = DEFAULT_WINDOW_ZOOM;
 
     const sanitizePageValue = (value) => {
       if (typeof value !== 'string') {
@@ -325,6 +335,27 @@ function createWindowCanvas() {
       }
     };
 
+    const isDefaultZoom = () => Math.abs(currentZoom - DEFAULT_WINDOW_ZOOM) < 0.001;
+
+    const syncZoomState = () => {
+      if (zoomDisplay) {
+        const percentage = Math.round(currentZoom * 100);
+        zoomDisplay.textContent = `${percentage}%`;
+      }
+
+      if (zoomOutButton) {
+        zoomOutButton.disabled = currentZoom <= MIN_WINDOW_ZOOM + 0.0001;
+      }
+
+      if (zoomInButton) {
+        zoomInButton.disabled = currentZoom >= MAX_WINDOW_ZOOM - 0.0001;
+      }
+
+      if (zoomResetButton) {
+        zoomResetButton.disabled = isDefaultZoom();
+      }
+    };
+
     const commitPageChange = (page) => {
       currentPage = page;
       syncNavigationState();
@@ -345,6 +376,48 @@ function createWindowCanvas() {
       }
 
       commitPageChange(nextPage);
+    };
+
+    const clampZoom = (value) => {
+      if (!Number.isFinite(value)) {
+        return currentZoom;
+      }
+
+      if (value < MIN_WINDOW_ZOOM) {
+        return MIN_WINDOW_ZOOM;
+      }
+
+      if (value > MAX_WINDOW_ZOOM) {
+        return MAX_WINDOW_ZOOM;
+      }
+
+      return Number.parseFloat(value.toFixed(2));
+    };
+
+    const commitZoomChange = (zoom) => {
+      const nextZoom = clampZoom(zoom);
+
+      if (Math.abs(nextZoom - currentZoom) < 0.0001) {
+        syncZoomState();
+        return;
+      }
+
+      currentZoom = nextZoom;
+      syncZoomState();
+      bringToFront();
+      const zoomChange = new CustomEvent(WINDOW_ZOOM_CHANGE_EVENT, {
+        bubbles: true,
+        detail: { file, zoom: currentZoom },
+      });
+      windowElement.dispatchEvent(zoomChange);
+    };
+
+    const stepZoom = (delta) => {
+      commitZoomChange(currentZoom + delta);
+    };
+
+    const resetZoom = () => {
+      commitZoomChange(DEFAULT_WINDOW_ZOOM);
     };
 
     const isPinned = () => windowElement.classList.contains('workspace__window--pinned');
@@ -484,7 +557,44 @@ function createWindowCanvas() {
     });
 
     pageForm.append(pageLabel, pageInput);
-    toolbar.append(prevButton, pageForm, nextButton);
+
+    const zoomGroup = document.createElement('div');
+    zoomGroup.className = 'workspace__window-zoom';
+
+    zoomOutButton = document.createElement('button');
+    zoomOutButton.type = 'button';
+    zoomOutButton.className = 'workspace__window-zoom-control workspace__window-zoom-control--out';
+    zoomOutButton.textContent = '縮小';
+    zoomOutButton.setAttribute('aria-label', `${file.name} を縮小表示`);
+    zoomOutButton.addEventListener('click', () => {
+      stepZoom(-WINDOW_ZOOM_STEP);
+    });
+
+    zoomDisplay = document.createElement('span');
+    zoomDisplay.className = 'workspace__window-zoom-display';
+    zoomDisplay.setAttribute('aria-live', 'polite');
+
+    zoomInButton = document.createElement('button');
+    zoomInButton.type = 'button';
+    zoomInButton.className = 'workspace__window-zoom-control workspace__window-zoom-control--in';
+    zoomInButton.textContent = '拡大';
+    zoomInButton.setAttribute('aria-label', `${file.name} を拡大表示`);
+    zoomInButton.addEventListener('click', () => {
+      stepZoom(WINDOW_ZOOM_STEP);
+    });
+
+    zoomResetButton = document.createElement('button');
+    zoomResetButton.type = 'button';
+    zoomResetButton.className = 'workspace__window-zoom-reset';
+    zoomResetButton.textContent = '100%';
+    zoomResetButton.setAttribute('aria-label', `${file.name} の表示倍率をリセット`);
+    zoomResetButton.addEventListener('click', () => {
+      resetZoom();
+    });
+
+    zoomGroup.append(zoomOutButton, zoomDisplay, zoomInButton, zoomResetButton);
+
+    toolbar.append(prevButton, pageForm, nextButton, zoomGroup);
 
     const placeholder = document.createElement('p');
     placeholder.className = 'workspace__window-placeholder';
@@ -493,6 +603,7 @@ function createWindowCanvas() {
     body.append(toolbar, placeholder);
 
     syncNavigationState();
+    syncZoomState();
     windowElement.append(header, body);
 
     const parsePixels = (value, fallback) => {

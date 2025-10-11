@@ -652,6 +652,93 @@ describe('createWorkspace', () => {
     expect(pageInput.value).toBe('1');
   });
 
+  it('adjusts zoom levels via the toolbar controls and announces the change', () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'zoom.pdf', { type: 'application/pdf' });
+
+    workspace.dispatchEvent(
+      new CustomEvent('workspace:file-open-request', {
+        bubbles: true,
+        detail: { file },
+      }),
+    );
+
+    const zoomDisplay = workspace.querySelector('.workspace__window-zoom-display');
+    const zoomOut = workspace.querySelector('.workspace__window-zoom-control--out');
+    const zoomIn = workspace.querySelector('.workspace__window-zoom-control--in');
+    const zoomReset = workspace.querySelector('.workspace__window-zoom-reset');
+
+    if (!zoomDisplay || !zoomOut || !zoomIn || !zoomReset) {
+      throw new Error('zoom controls are required for the test');
+    }
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-zoom-change', handler);
+
+    expect(zoomDisplay.textContent).toBe('100%');
+    expect(zoomOut.disabled).toBe(false);
+    expect(zoomReset.disabled).toBe(true);
+
+    zoomIn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].detail.zoom).toBeCloseTo(1.1, 2);
+    expect(zoomDisplay.textContent).toBe('110%');
+    expect(zoomOut.disabled).toBe(false);
+    expect(zoomReset.disabled).toBe(false);
+
+    for (let i = 0; i < 20; i += 1) {
+      zoomIn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+
+    const lastCallAfterMax = handler.mock.calls[handler.mock.calls.length - 1];
+
+    if (!lastCallAfterMax) {
+      throw new Error('zoom handler must receive events');
+    }
+
+    expect(lastCallAfterMax[0].detail.zoom).toBeCloseTo(2, 2);
+    expect(zoomDisplay.textContent).toBe('200%');
+    expect(zoomIn.disabled).toBe(true);
+
+    zoomOut.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const afterDecrease = handler.mock.calls[handler.mock.calls.length - 1];
+
+    if (!afterDecrease) {
+      throw new Error('zoom handler must receive decrease event');
+    }
+
+    expect(afterDecrease[0].detail.zoom).toBeCloseTo(1.9, 2);
+    expect(zoomDisplay.textContent).toBe('190%');
+    expect(zoomIn.disabled).toBe(false);
+
+    while (!zoomOut.disabled) {
+      zoomOut.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+
+    const afterMinCall = handler.mock.calls[handler.mock.calls.length - 1];
+
+    if (!afterMinCall) {
+      throw new Error('zoom handler must receive minimum zoom event');
+    }
+
+    expect(afterMinCall[0].detail.zoom).toBeCloseTo(0.5, 2);
+    expect(zoomDisplay.textContent).toBe('50%');
+    expect(zoomOut.disabled).toBe(true);
+
+    zoomReset.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const afterReset = handler.mock.calls[handler.mock.calls.length - 1];
+
+    if (!afterReset) {
+      throw new Error('zoom handler must receive reset event');
+    }
+
+    expect(afterReset[0].detail.zoom).toBeCloseTo(1, 3);
+    expect(zoomDisplay.textContent).toBe('100%');
+    expect(zoomOut.disabled).toBe(false);
+    expect(zoomIn.disabled).toBe(false);
+    expect(zoomReset.disabled).toBe(true);
+  });
+
   it('closes windows and emits a closure event', () => {
     const workspace = createWorkspace();
     const file = new File(['dummy'], 'close.pdf', { type: 'application/pdf' });
