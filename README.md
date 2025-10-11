@@ -31,6 +31,7 @@ pnpm vitest -- --watch
 - [docs/基本要件.md](docs/%E5%9F%BA%E6%9C%AC%E8%A6%81%E4%BB%B6.md)
 - [docs/CHANGELOG.md](docs/CHANGELOG.md)
 - [docs/DECISIONS.md](docs/DECISIONS.md)
+- [docs/TASKS.md](docs/TASKS.md)
 
 プロジェクトの意思決定や変更履歴は上記ドキュメントに記録します。
 

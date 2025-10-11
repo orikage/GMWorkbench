@@ -195,6 +195,53 @@ describe('createWorkspace', () => {
     ).toBe('window.pdf');
   });
 
+  it('exposes placeholder metadata for page and zoom state', () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'state.pdf', { type: 'application/pdf' });
+
+    workspace.dispatchEvent(
+      new CustomEvent('workspace:file-open-request', {
+        bubbles: true,
+        detail: { file },
+      }),
+    );
+
+    const placeholder = workspace.querySelector('.workspace__window-placeholder');
+
+    if (!(placeholder instanceof HTMLElement)) {
+      throw new Error('window placeholder element is required for the test');
+    }
+
+    expect(placeholder.dataset.page).toBe('1');
+    expect(placeholder.dataset.zoom).toBe('1');
+    expect(placeholder.textContent).toContain('ページ 1');
+
+    const pageInput = workspace.querySelector('.workspace__window-page-input');
+
+    if (!(pageInput instanceof HTMLInputElement)) {
+      throw new Error('page input is required for the test');
+    }
+
+    pageInput.value = '3';
+    pageInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(placeholder.dataset.page).toBe('3');
+    expect(placeholder.textContent).toContain('ページ 3');
+
+    const zoomInButton = workspace.querySelector(
+      '.workspace__window-zoom-control--in',
+    );
+
+    if (!(zoomInButton instanceof HTMLButtonElement)) {
+      throw new Error('zoom in button is required for the test');
+    }
+
+    zoomInButton.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(placeholder.dataset.zoom).toBe('1.1');
+    expect(placeholder.textContent).toContain('110%');
+  });
+
   it('stacks new windows with offsets and updates the active state', () => {
     const workspace = createWorkspace();
     const canvas = workspace.querySelector('.workspace__canvas');

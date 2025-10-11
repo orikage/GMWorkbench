@@ -359,6 +359,7 @@ function createWindowCanvas() {
     const commitPageChange = (page) => {
       currentPage = page;
       syncNavigationState();
+      syncPlaceholderState();
       bringToFront();
       const pageChange = new CustomEvent(WINDOW_PAGE_CHANGE_EVENT, {
         bubbles: true,
@@ -404,6 +405,7 @@ function createWindowCanvas() {
 
       currentZoom = nextZoom;
       syncZoomState();
+      syncPlaceholderState();
       bringToFront();
       const zoomChange = new CustomEvent(WINDOW_ZOOM_CHANGE_EVENT, {
         bubbles: true,
@@ -598,12 +600,19 @@ function createWindowCanvas() {
 
     const placeholder = document.createElement('p');
     placeholder.className = 'workspace__window-placeholder';
-    placeholder.textContent = 'PDFビューアは近日追加予定です。';
+
+    const syncPlaceholderState = () => {
+      placeholder.dataset.page = String(currentPage);
+      placeholder.dataset.zoom = String(currentZoom);
+      const percentage = Math.round(currentZoom * 100);
+      placeholder.textContent = `ページ ${currentPage} を ${percentage}% で表示予定です。`;
+    };
 
     body.append(toolbar, placeholder);
 
     syncNavigationState();
     syncZoomState();
+    syncPlaceholderState();
     windowElement.append(header, body);
 
     const parsePixels = (value, fallback) => {
