@@ -322,6 +322,34 @@ export async function removeWorkspaceWindow(id) {
   });
 }
 
+export async function clearWorkspaceWindows() {
+  memoryStore.clear();
+
+  if (!hasIndexedDB()) {
+    return;
+  }
+
+  const database = await getDatabase();
+
+  if (!database) {
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => {
+      resolve();
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to clear workspace windows.'));
+    };
+  });
+}
+
 export function __clearMemoryStore() {
   memoryStore.clear();
 }
