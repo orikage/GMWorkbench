@@ -55,6 +55,7 @@ pnpm docs:print:decisions
 - `workspace:window-pin-toggle` — ウィンドウのピン留め状態を切り替えたとき。
 - `workspace:window-page-change` — ページ入力やナビゲーション、キーボード操作で表示ページが変わったとき。詳細には `page` と `totalPages` を含む。
 - `workspace:window-zoom-change` — ウィンドウの倍率を拡大・縮小・リセットしたとき。詳細には `zoom` (0.5〜2.0) と現在の `page` を含む。
+- `workspace:cache-cleared` — メンテナンス操作で保存済みデータを削除したとき。`detail.windowsCleared` に閉じたウィンドウ件数が入ります。
 
 ## PDFビューア統合
 
@@ -67,4 +68,4 @@ pnpm docs:print:decisions
 
 - IndexedDB にウィンドウ配置・ページ・ズーム・ピン状態を保存し、ブラウザを再読み込みしても直近の PDF 状態を復元します。
 - PDF ファイル本体はローカルのみで保持され、`File`/`Blob` を直接 IndexedDB に退避します。ネットワークへ送信されることはありません。
-- ブラウザの「サイトデータを削除」を実行すると保存されたセッションが初期化されます。現状 UI 上のリセット手段は追って提供予定です。
+- ブラウザの「サイトデータを削除」を実行すると保存されたセッションが初期化されます。UI 上でも「キャッシュを全削除」ボタンから保存済み PDF とウィンドウ配置を一括でリセットでき、処理完了時には `workspace:cache-cleared` を発火します。

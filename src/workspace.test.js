@@ -20,11 +20,13 @@ const storageMocks = vi.hoisted(() => {
   const load = vi.fn();
   const persist = vi.fn();
   const remove = vi.fn();
+  const clear = vi.fn();
 
   return {
     load,
     persist,
     remove,
+    clear,
   };
 });
 
@@ -45,6 +47,7 @@ vi.mock('./workspace-storage.js', () => ({
   loadWorkspaceWindows: storageMocks.load,
   persistWorkspaceWindow: storageMocks.persist,
   removeWorkspaceWindow: storageMocks.remove,
+  clearWorkspaceWindows: storageMocks.clear,
 }));
 
 import { createWorkspace } from './workspace.js';
@@ -85,10 +88,12 @@ beforeEach(() => {
   storageMocks.load.mockReset();
   storageMocks.persist.mockReset();
   storageMocks.remove.mockReset();
+  storageMocks.clear.mockReset();
 
   storageMocks.load.mockResolvedValue([]);
   storageMocks.persist.mockResolvedValue();
   storageMocks.remove.mockResolvedValue();
+  storageMocks.clear.mockResolvedValue();
 
   pdfMocks.renderMock.mockImplementation(() => ({ promise: Promise.resolve() }));
   pdfMocks.getPageMock.mockImplementation(async () => ({
@@ -934,5 +939,123 @@ describe('createWorkspace', () => {
     } else {
       expect(storageMocks.remove).toHaveBeenCalled();
     }
+  });
+
+  it('clears persisted data and open windows via the maintenance control', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'clear.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+    await flushPromises();
+
+    workspace.dispatchEvent(
+      new CustomEvent('workspace:file-selected', {
+        bubbles: true,
+        detail: { files: [file] },
+      }),
+    );
+
+    const button = workspace.querySelector('.workspace__maintenance-button');
+
+    if (!button) {
+      throw new Error('maintenance control is required');
+    }
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const clearedHandler = vi.fn();
+    workspace.addEventListener('workspace:cache-cleared', clearedHandler);
+
+    button.click();
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(storageMocks.clear).toHaveBeenCalledTimes(1);
+    expect(storageMocks.remove).not.toHaveBeenCalled();
+
+    expect(workspace.querySelector('.workspace__window')).toBeNull();
+    expect(workspace.querySelector('.workspace__queue-item')).toBeNull();
+
+    const status = workspace.querySelector('.workspace__maintenance-status');
+
+    if (!status) {
+      throw new Error('maintenance status element is required');
+    }
+
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toContain('保存データを削除しました');
+
+    expect(clearedHandler).toHaveBeenCalledTimes(1);
+    expect(clearedHandler.mock.calls[0][0].detail.windowsCleared).toBe(1);
+
+    confirmSpy.mockRestore();
+  });
+
+  it('does not clear data when the maintenance confirmation is cancelled', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'cancel.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+    await flushPromises();
+
+    const button = workspace.querySelector('.workspace__maintenance-button');
+
+    if (!button) {
+      throw new Error('maintenance control is required');
+    }
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    button.click();
+
+    await flushPromises();
+
+    expect(storageMocks.clear).not.toHaveBeenCalled();
+    expect(workspace.querySelector('.workspace__window')).not.toBeNull();
+
+    const status = workspace.querySelector('.workspace__maintenance-status');
+    expect(status?.hidden).toBe(true);
+
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces an error message when clearing persisted data fails', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'error.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+    await flushPromises();
+
+    storageMocks.clear.mockRejectedValueOnce(new Error('failed to clear'));
+
+    const button = workspace.querySelector('.workspace__maintenance-button');
+
+    if (!button) {
+      throw new Error('maintenance control is required');
+    }
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    button.click();
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(storageMocks.clear).toHaveBeenCalledTimes(1);
+    expect(storageMocks.remove).not.toHaveBeenCalled();
+    expect(workspace.querySelector('.workspace__window')).not.toBeNull();
+
+    const status = workspace.querySelector('.workspace__maintenance-status');
+
+    if (!status) {
+      throw new Error('maintenance status element is required');
+    }
+
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toContain('削除に失敗しました');
+    expect(status.classList.contains('workspace__maintenance-status--error')).toBe(true);
+
+    confirmSpy.mockRestore();
   });
 });

@@ -3,6 +3,7 @@ import {
   loadWorkspaceWindows,
   persistWorkspaceWindow,
   removeWorkspaceWindow,
+  clearWorkspaceWindows,
 } from './workspace-storage.js';
 
 const TITLE = 'GMWorkbench';
@@ -26,6 +27,7 @@ const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
 const WINDOW_ZOOM_STEP = 0.1;
+const WORKSPACE_CACHE_CLEARED_EVENT = 'workspace:cache-cleared';
 
 function createHeader() {
   const header = document.createElement('header');
@@ -237,9 +239,15 @@ function createFileQueue() {
 
   section.append(heading, emptyState, list);
 
+  const clear = () => {
+    list.replaceChildren();
+    syncEmptyState();
+  };
+
   return {
     element: section,
     renderFiles,
+    clear,
   };
 }
 
@@ -248,6 +256,92 @@ function createHint() {
   hint.className = 'workspace__hint';
   hint.textContent = '初期バージョンではワークスペースの骨格を整え、操作フローを言語化しています。';
   return hint;
+}
+
+function createMaintenancePanel({ onClear } = {}) {
+  const section = document.createElement('section');
+  section.className = 'workspace__maintenance';
+
+  const heading = document.createElement('h2');
+  heading.className = 'workspace__maintenance-title';
+  heading.textContent = '保存データの管理';
+
+  const description = document.createElement('p');
+  description.className = 'workspace__maintenance-description';
+  description.textContent = 'ブラウザに保存されたPDFとウィンドウ配置を全て削除します。';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'workspace__maintenance-button';
+  button.textContent = 'キャッシュを全削除';
+
+  const status = document.createElement('p');
+  status.className = 'workspace__maintenance-status';
+  status.setAttribute('role', 'status');
+  status.hidden = true;
+
+  const resetStatus = () => {
+    status.hidden = true;
+    status.textContent = '';
+    status.classList.remove('workspace__maintenance-status--error');
+  };
+
+  const showStatus = (message, { isError = false } = {}) => {
+    status.textContent = message;
+    status.hidden = false;
+
+    if (isError) {
+      status.classList.add('workspace__maintenance-status--error');
+    } else {
+      status.classList.remove('workspace__maintenance-status--error');
+    }
+  };
+
+  let clearing = false;
+
+  button.addEventListener('click', async () => {
+    if (clearing) {
+      return;
+    }
+
+    resetStatus();
+
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      const confirmed = window.confirm('保存済みのPDFとレイアウトをすべて削除しますか？');
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    clearing = true;
+    button.disabled = true;
+    button.textContent = '削除中…';
+
+    try {
+      const result = (await onClear?.()) || {};
+      const windowsCleared = Number.isFinite(result.windowsCleared)
+        ? result.windowsCleared
+        : 0;
+      const summary = windowsCleared > 0
+        ? `保存データを削除しました（ウィンドウ${windowsCleared}件）。`
+        : '保存データを削除しました。';
+      showStatus(summary);
+    } catch (error) {
+      showStatus('削除に失敗しました。もう一度お試しください。', { isError: true });
+    } finally {
+      clearing = false;
+      button.disabled = false;
+      button.textContent = 'キャッシュを全削除';
+    }
+  });
+
+  section.append(heading, description, button, status);
+
+  return {
+    element: section,
+    showStatus,
+  };
 }
 
 function createWindowCanvas() {
@@ -353,6 +447,46 @@ function createWindowCanvas() {
     let hasStoredFile = options.persisted === true;
 
     const viewer = createPdfViewer(file);
+    let disposed = false;
+
+    const dispatchCloseEvent = () => {
+      const closure = new CustomEvent(WINDOW_CLOSE_EVENT, {
+        bubbles: true,
+        detail: { file },
+      });
+      windowElement.dispatchEvent(closure);
+    };
+
+    const disposeWindow = ({ persistRemoval = true, emitClose = true } = {}) => {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+
+      if (emitClose) {
+        dispatchCloseEvent();
+      }
+
+      try {
+        viewer.destroy();
+      } catch (error) {
+        // Viewer teardown errors are non-fatal; suppress noisy logs.
+      }
+
+      windowElement.remove();
+      windowRegistry.delete(windowId);
+      syncEmptyState();
+
+      if (windowRegistry.size === 0) {
+        zIndexCounter = 1;
+        pinnedZIndexCounter = 10000;
+      }
+
+      if (persistRemoval) {
+        removeWorkspaceWindow(windowId).catch(() => {});
+      }
+    };
 
     const getWindowSize = () => ({
       width: parsePixels(windowElement.style.width, DEFAULT_WINDOW_WIDTH),
@@ -666,16 +800,7 @@ function createWindowCanvas() {
     closeButton.className = 'workspace__window-close';
     closeButton.textContent = '閉じる';
     closeButton.addEventListener('click', () => {
-      const closure = new CustomEvent(WINDOW_CLOSE_EVENT, {
-        bubbles: true,
-        detail: { file },
-      });
-      windowElement.dispatchEvent(closure);
-      viewer.destroy();
-      windowElement.remove();
-      windowRegistry.delete(windowId);
-      syncEmptyState();
-      removeWorkspaceWindow(windowId).catch(() => {});
+      disposeWindow();
     });
 
     controls.append(pinButton, closeButton);
@@ -946,7 +1071,7 @@ function createWindowCanvas() {
 
     windowElement.append(resizeHandle);
     area.append(windowElement);
-    windowRegistry.set(windowId, { element: windowElement, bringToFront });
+    windowRegistry.set(windowId, { element: windowElement, bringToFront, dispose: disposeWindow });
 
     if (shouldAutoFocus) {
       bringToFront();
@@ -973,12 +1098,28 @@ function createWindowCanvas() {
     return entry.element;
   };
 
+  const closeAllWindows = ({ emitClose = true } = {}) => {
+    const entries = Array.from(windowRegistry.values());
+
+    entries.forEach((entry) => {
+      if (entry && typeof entry.dispose === 'function') {
+        entry.dispose({ persistRemoval: false, emitClose });
+      }
+    });
+
+    return entries.length;
+  };
+
+  const getWindowCount = () => windowRegistry.size;
+
   section.append(heading, emptyState, area);
 
   return {
     element: section,
     openWindow,
     focusWindow,
+    closeAllWindows,
+    getWindowCount,
   };
 }
 
@@ -990,6 +1131,22 @@ export function createWorkspace() {
 
   const queue = createFileQueue();
   const canvas = createWindowCanvas();
+  const maintenance = createMaintenancePanel({
+    onClear: async () => {
+      await clearWorkspaceWindows();
+      const windowsCleared = canvas.closeAllWindows();
+      queue.clear();
+
+      const cleared = new CustomEvent(WORKSPACE_CACHE_CLEARED_EVENT, {
+        bubbles: true,
+        detail: { windowsCleared },
+      });
+
+      workspace.dispatchEvent(cleared);
+
+      return { windowsCleared };
+    },
+  });
 
   workspace.addEventListener('workspace:file-selected', (event) => {
     const files = event.detail?.files;
@@ -1077,6 +1234,7 @@ export function createWorkspace() {
     createDropZone(),
     queue.element,
     canvas.element,
+    maintenance.element,
     createHint(),
   );
   return workspace;

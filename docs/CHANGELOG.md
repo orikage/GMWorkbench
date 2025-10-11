@@ -9,5 +9,6 @@
 4. 最新の一覧が必要なときは `docs/changelog/` を参照するか、`pnpm run docs:print:changelog` などの補助スクリプトで収集してください（スクリプトは任意）。
 
 ## 既存エントリ
+- [2025-10-11 — キャッシュ全削除とメンテナンス動線](changelog/2025-10-11-cache-maintenance.md)
 - [2025-10-11 — ワークスペース基盤と永続化](changelog/2025-10-11-workspace-foundations.md)
 - [2025-10-11 — ドキュメント分割によるコンフリクト削減](changelog/2025-10-11-docs-split.md)
