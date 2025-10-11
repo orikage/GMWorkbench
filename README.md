@@ -1,0 +1,2 @@
+# GMWorkbench
+pdfシナリオを読みやすくする
