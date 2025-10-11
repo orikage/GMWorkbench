@@ -58,6 +58,7 @@ pnpm docs:print:decisions
 - `workspace:window-duplicate` — ウィンドウの「複製」を押したとき。`page`, `zoom`, `totalPages`, `sourceId`, `duplicateId`, `title` を併せて通知する。
 - `workspace:window-notes-change` — ウィンドウ内のメモが更新されたとき。`detail.notes` に最新テキストを含む。
 - `workspace:window-title-change` — ウィンドウタイトルが保存されたとき。`detail.title` に確定したタイトルを含む。
+- `workspace:window-color-change` — ウィンドウの色タグを切り替えたとき。`detail.color` に現在の色 ID を含む。
 - `workspace:cache-cleared` — メンテナンス操作で保存済みデータを削除したとき。`detail.windowsCleared` に閉じたウィンドウ件数が入ります。
 
 ## PDFビューア統合
@@ -91,6 +92,12 @@ pnpm docs:print:decisions
 - ヘッダーの「名称変更」ボタンからタイトルを編集でき、Enter で確定・Escape でキャンセルできます。空のまま確定すると元のファイル名に戻ります。
 - 確定時には `workspace:window-title-change` を発火し、`data-window-title` 属性と各種 `aria-label` が最新タイトルと同期されます。
 - 設定したタイトルは永続化され、複製やセッション復元でも引き継がれます。
+
+## ウィンドウカラータグ
+
+- ヘッダーの「色」ボタンで標準 → 琥珀 → 翡翠 → 紅玉 → 藍の順にタグカラーを循環させられます。
+- 選択中の色は `data-window-color` と `workspace__window--color-*` クラスに反映され、スタイルとテストから一貫して参照できます。
+- 変更時には `workspace:window-color-change` を発火し、`detail.color` に現在の色 ID を含めます。選択内容は永続化・複製・復元でも保持されます。
 
 ## ページ履歴ナビゲーション
 

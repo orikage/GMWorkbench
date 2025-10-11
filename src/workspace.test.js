@@ -199,6 +199,7 @@ describe('createWorkspace', () => {
         persisted: true,
         notes: '復元メモ',
         title: '永続ウィンドウ',
+        color: 'emerald',
       },
     ]);
 
@@ -218,6 +219,8 @@ describe('createWorkspace', () => {
     expect(windowElement?.style.width).toBe('512px');
     expect(windowElement?.style.height).toBe('420px');
     expect(windowElement?.dataset.windowTitle).toBe('永続ウィンドウ');
+    expect(windowElement?.dataset.windowColor).toBe('emerald');
+    expect(windowElement?.classList.contains('workspace__window--color-emerald')).toBe(true);
     expect(windowElement?.dataset.pageHistoryIndex).toBe('0');
     expect(windowElement?.dataset.pageHistoryLength).toBe('1');
 
@@ -783,6 +786,7 @@ describe('createWorkspace', () => {
     );
     const duplicateButton = windowElement.querySelector('.workspace__window-duplicate');
     const pinButton = windowElement.querySelector('.workspace__window-pin');
+    const colorButton = windowElement.querySelector('.workspace__window-color');
     const notesInput = windowElement.querySelector('.workspace__window-notes-input');
     const renameButton = windowElement.querySelector('.workspace__window-rename');
     const titleInput = windowElement.querySelector('.workspace__window-title-input');
@@ -793,6 +797,7 @@ describe('createWorkspace', () => {
       !zoomInButton ||
       !duplicateButton ||
       !pinButton ||
+      !colorButton ||
       !notesInput ||
       !renameButton ||
       !titleInput ||
@@ -824,6 +829,14 @@ describe('createWorkspace', () => {
 
     await flushPromises();
 
+    colorButton.click();
+    await flushPromises();
+    colorButton.click();
+    await flushPromises();
+
+    expect(windowElement.dataset.windowColor).toBe('emerald');
+    expect(colorButton.textContent).toBe('色: 翡翠');
+
     const duplicateHandler = vi.fn();
     workspace.addEventListener('workspace:window-duplicate', duplicateHandler);
 
@@ -849,6 +862,7 @@ describe('createWorkspace', () => {
     expect(duplicateWindow?.dataset.notesLength).toBe(String('魔王城の罠メモ'.length));
     expect(originalWindow.dataset.windowTitle).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.windowTitle).toBe('魔王討伐計画');
+    expect(duplicateWindow?.dataset.windowColor).toBe('emerald');
     expect(titleLabel.textContent).toBe('魔王討伐計画');
     expect(duplicateTitle?.textContent).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.pageHistoryLength).toBe(
@@ -878,6 +892,7 @@ describe('createWorkspace', () => {
     expect(detail.duplicateId).toBe(duplicateWindow?.dataset.windowId);
     expect(detail.notes).toBe('魔王城の罠メモ');
     expect(detail.title).toBe('魔王討伐計画');
+    expect(detail.color).toBe('emerald');
   });
 
   it('renames windows, updates metadata, and persists the new title', async () => {
@@ -892,6 +907,7 @@ describe('createWorkspace', () => {
     const titleLabel = workspace.querySelector('.workspace__window-title');
     const pinButton = workspace.querySelector('.workspace__window-pin');
     const duplicateButton = workspace.querySelector('.workspace__window-duplicate');
+    const colorButton = workspace.querySelector('.workspace__window-color');
     const notesInput = workspace.querySelector('.workspace__window-notes-input');
     const pageForm = workspace.querySelector('.workspace__window-page');
     const pageInput = workspace.querySelector('.workspace__window-page-input');
@@ -912,6 +928,7 @@ describe('createWorkspace', () => {
       !titleLabel ||
       !pinButton ||
       !duplicateButton ||
+      !colorButton ||
       !notesInput ||
       !pageForm ||
       !pageInput ||
@@ -949,6 +966,7 @@ describe('createWorkspace', () => {
     expect(windowElement.getAttribute('aria-label')).toBe('遭遇表 のウィンドウ');
     expect(pinButton.getAttribute('aria-label')).toBe('遭遇表 を前面に固定');
     expect(duplicateButton.getAttribute('aria-label')).toBe('遭遇表 を別ウィンドウで複製');
+    expect(colorButton.getAttribute('aria-label')).toBe('遭遇表 の色を切り替え (現在: 標準)');
     expect(notesInput.getAttribute('aria-label')).toBe('遭遇表 のメモ');
     expect(pageForm.getAttribute('aria-label')).toBe('遭遇表 の表示ページを設定');
     expect(pageInput.getAttribute('aria-label')).toBe('遭遇表 の表示ページ番号');
@@ -962,6 +980,8 @@ describe('createWorkspace', () => {
     expect(zoomInButton.getAttribute('aria-label')).toBe('遭遇表 を拡大表示');
     expect(zoomResetButton.getAttribute('aria-label')).toBe('遭遇表 の表示倍率をリセット');
     expect(renameButton.textContent).toBe('名称変更');
+    expect(colorButton.textContent).toBe('色: 標準');
+    expect(windowElement.dataset.windowColor).toBe('neutral');
 
     const renamePersist =
       storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
@@ -971,6 +991,7 @@ describe('createWorkspace', () => {
     }
 
     expect(renamePersist[0].title).toBe('遭遇表');
+    expect(renamePersist[0].color).toBe('neutral');
 
     renameButton.click();
     await flushPromises();
@@ -1031,6 +1052,59 @@ describe('createWorkspace', () => {
 
     const [state] = lastCall;
     expect(state.notes).toBe('敵NPCの口調を変更する');
+    expect(state.color).toBe('neutral');
+  });
+
+  it('cycles window colors, emits change events, and persists selection', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['color'], 'color.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+    const colorButton = workspace.querySelector('.workspace__window-color');
+
+    if (!windowElement || !colorButton) {
+      throw new Error('color controls must exist for the test');
+    }
+
+    expect(windowElement.dataset.windowColor).toBe('neutral');
+    expect(colorButton.textContent).toBe('色: 標準');
+
+    storageMocks.persist.mockClear();
+
+    const handler = vi.fn();
+    workspace.addEventListener('workspace:window-color-change', handler);
+
+    colorButton.click();
+    await flushPromises();
+
+    expect(windowElement.dataset.windowColor).toBe('amber');
+    expect(windowElement.classList.contains('workspace__window--color-amber')).toBe(true);
+    expect(colorButton.textContent).toBe('色: 琥珀');
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].detail.file).toBe(file);
+    expect(handler.mock.calls[0][0].detail.color).toBe('amber');
+
+    colorButton.click();
+    await flushPromises();
+
+    expect(windowElement.dataset.windowColor).toBe('emerald');
+    expect(windowElement.classList.contains('workspace__window--color-emerald')).toBe(true);
+    expect(colorButton.textContent).toBe('色: 翡翠');
+    expect(colorButton.getAttribute('aria-label')).toBe('color.pdf の色を切り替え (現在: 翡翠)');
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler.mock.calls[1][0].detail.file).toBe(file);
+    expect(handler.mock.calls[1][0].detail.color).toBe('emerald');
+
+    const lastCall = storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
+
+    if (!lastCall) {
+      throw new Error('color persistence call is required');
+    }
+
+    const [state] = lastCall;
+    expect(state.color).toBe('emerald');
   });
 
   it('changes window pages through the navigation controls and emits updates', async () => {
@@ -1122,6 +1196,7 @@ describe('createWorkspace', () => {
     const [state] = lastPersist;
     expect(state.pageHistory).toEqual([1, 2, 5, 4]);
     expect(state.pageHistoryIndex).toBe(3);
+    expect(state.color).toBe('neutral');
   });
 
   it('navigates page history backward, forward, and trims stale entries', async () => {
@@ -1202,6 +1277,7 @@ describe('createWorkspace', () => {
     const [state] = lastPersist;
     expect(state.pageHistory).toEqual([1, 2, 9]);
     expect(state.pageHistoryIndex).toBe(2);
+    expect(state.color).toBe('neutral');
   });
 
   it('supports keyboard page navigation when the window is focused', async () => {

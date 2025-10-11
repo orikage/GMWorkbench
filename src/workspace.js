@@ -26,12 +26,21 @@ const WINDOW_ZOOM_CHANGE_EVENT = 'workspace:window-zoom-change';
 const WINDOW_DUPLICATE_EVENT = 'workspace:window-duplicate';
 const WINDOW_NOTES_CHANGE_EVENT = 'workspace:window-notes-change';
 const WINDOW_TITLE_CHANGE_EVENT = 'workspace:window-title-change';
+const WINDOW_COLOR_CHANGE_EVENT = 'workspace:window-color-change';
 const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
 const WINDOW_ZOOM_STEP = 0.1;
 const PAGE_HISTORY_LIMIT = 50;
 const WORKSPACE_CACHE_CLEARED_EVENT = 'workspace:cache-cleared';
+const WINDOW_COLORS = [
+  { id: 'neutral', label: '標準' },
+  { id: 'amber', label: '琥珀' },
+  { id: 'emerald', label: '翡翠' },
+  { id: 'rose', label: '紅玉' },
+  { id: 'indigo', label: '藍' },
+];
+const DEFAULT_WINDOW_COLOR = WINDOW_COLORS[0].id;
 
 function createHeader() {
   const header = document.createElement('header');
@@ -495,7 +504,20 @@ function createWindowCanvas() {
         : defaultTitle;
     let titleInput;
     let renameButton;
+    let colorButton;
     let editingTitle = false;
+
+    const sanitizeColor = (value) => {
+      if (typeof value !== 'string') {
+        return DEFAULT_WINDOW_COLOR;
+      }
+
+      const normalized = value.toLowerCase();
+      const match = WINDOW_COLORS.find((color) => color.id === normalized);
+      return match ? match.id : DEFAULT_WINDOW_COLOR;
+    };
+
+    let windowColor = sanitizeColor(options.color);
 
     const viewer = createPdfViewer(file);
     let disposed = false;
@@ -574,6 +596,7 @@ function createWindowCanvas() {
         lastFocusedAt,
         title: windowTitle,
         notes: notesContent,
+        color: windowColor,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
       };
@@ -968,6 +991,11 @@ function createWindowCanvas() {
     renameButton.textContent = '名称変更';
     renameButton.setAttribute('aria-label', `${windowTitle} のタイトルを変更`);
 
+    colorButton = document.createElement('button');
+    colorButton.type = 'button';
+    colorButton.className = 'workspace__window-color';
+    colorButton.dataset.windowColor = windowColor;
+
     const pinButton = document.createElement('button');
     pinButton.type = 'button';
     pinButton.className = 'workspace__window-pin';
@@ -997,6 +1025,61 @@ function createWindowCanvas() {
     duplicateButton.className = 'workspace__window-duplicate';
     duplicateButton.textContent = '複製';
     duplicateButton.setAttribute('aria-label', `${windowTitle} を別ウィンドウで複製`);
+
+    const getColorDefinition = () => {
+      const match = WINDOW_COLORS.find((color) => color.id === windowColor);
+      return match ?? WINDOW_COLORS[0];
+    };
+
+    const syncColorButton = () => {
+      if (!colorButton) {
+        return;
+      }
+
+      const { label } = getColorDefinition();
+      colorButton.textContent = `色: ${label}`;
+      colorButton.dataset.windowColor = windowColor;
+      colorButton.setAttribute(
+        'aria-label',
+        `${windowTitle} の色を切り替え (現在: ${label})`,
+      );
+    };
+
+    const syncWindowColorDisplay = () => {
+      WINDOW_COLORS.forEach(({ id }) => {
+        const className = `workspace__window--color-${id}`;
+
+        if (windowColor === id) {
+          windowElement.classList.add(className);
+        } else {
+          windowElement.classList.remove(className);
+        }
+      });
+
+      windowElement.dataset.windowColor = windowColor;
+      syncColorButton();
+    };
+
+    const cycleWindowColor = () => {
+      const currentIndex = WINDOW_COLORS.findIndex((color) => color.id === windowColor);
+      const nextIndex = (currentIndex + 1) % WINDOW_COLORS.length;
+
+      windowColor = WINDOW_COLORS[nextIndex].id;
+      syncWindowColorDisplay();
+      bringToFront();
+      const colorChange = new CustomEvent(WINDOW_COLOR_CHANGE_EVENT, {
+        bubbles: true,
+        detail: { file, color: windowColor },
+      });
+
+      windowElement.dispatchEvent(colorChange);
+      schedulePersist();
+    };
+
+    colorButton.addEventListener('click', () => {
+      cycleWindowColor();
+    });
+
     const syncControlLabels = () => {
       const windowLabel = `${windowTitle} のウィンドウ`;
       windowElement.setAttribute('aria-label', windowLabel);
@@ -1047,6 +1130,8 @@ function createWindowCanvas() {
       if (resizeHandle) {
         resizeHandle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
       }
+
+      syncColorButton();
     };
 
     const syncWindowTitleDisplay = () => {
@@ -1169,6 +1254,7 @@ function createWindowCanvas() {
         title: windowTitle,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
+        color: windowColor,
       });
 
       if (!duplicateElement) {
@@ -1186,6 +1272,7 @@ function createWindowCanvas() {
           duplicateId: duplicateElement.dataset?.windowId,
           notes: notesContent,
           title: windowTitle,
+          color: windowColor,
         },
       });
 
@@ -1200,7 +1287,7 @@ function createWindowCanvas() {
       disposeWindow();
     });
 
-    controls.append(renameButton, pinButton, duplicateButton, closeButton);
+    controls.append(renameButton, colorButton, pinButton, duplicateButton, closeButton);
     header.append(titleGroup, controls);
 
     const body = document.createElement('div');
@@ -1567,6 +1654,7 @@ function createWindowCanvas() {
 
     resizeHandle.addEventListener('mousedown', handleResizeStart);
 
+    syncWindowColorDisplay();
     syncWindowTitleDisplay();
 
     if (options.pinned === true) {

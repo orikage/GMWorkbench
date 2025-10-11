@@ -126,6 +126,10 @@ function normalizeForStorage(state) {
     normalized.notes = state.notes;
   }
 
+  if (typeof state.color === 'string' && state.color.length > 0) {
+    normalized.color = state.color;
+  }
+
   let history = [];
   let trimmedOffset = 0;
 
@@ -267,6 +271,7 @@ function normalizeFromStorage(record) {
       : undefined,
     title: typeof record.title === 'string' ? record.title : undefined,
     notes: typeof record.notes === 'string' ? record.notes : '',
+    color: typeof record.color === 'string' ? record.color : undefined,
     pageHistory: history.length > 0 ? history : undefined,
     pageHistoryIndex: Number.isFinite(historyIndex) ? historyIndex : undefined,
     persisted: true,

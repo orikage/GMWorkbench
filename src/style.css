@@ -433,6 +433,89 @@ body {
   color: rgba(14, 25, 38, 0.98);
 }
 
+.workspace__window-color {
+  position: relative;
+  padding: 6px 14px 6px 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 245, 247, 0.18);
+  background: rgba(244, 245, 247, 0.08);
+  color: rgba(244, 245, 247, 0.82);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.workspace__window-color::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(244, 245, 247, 0.45);
+  box-shadow: 0 0 0 2px rgba(10, 14, 28, 0.35);
+}
+
+.workspace__window-color:focus,
+.workspace__window-color:hover {
+  outline: none;
+  background: rgba(244, 245, 247, 0.18);
+  border-color: rgba(244, 245, 247, 0.35);
+  color: rgba(244, 245, 247, 0.94);
+  transform: translateY(-1px);
+}
+
+.workspace__window-color[data-window-color='neutral']::before {
+  background: rgba(244, 245, 247, 0.65);
+}
+
+.workspace__window-color[data-window-color='amber']::before {
+  background: #f9b84c;
+}
+
+.workspace__window-color[data-window-color='emerald']::before {
+  background: #42d392;
+}
+
+.workspace__window-color[data-window-color='rose']::before {
+  background: #ff6b91;
+}
+
+.workspace__window-color[data-window-color='indigo']::before {
+  background: #7b8bff;
+}
+
+.workspace__window-color[data-window-color='amber']:focus,
+.workspace__window-color[data-window-color='amber']:hover {
+  background: rgba(249, 184, 76, 0.24);
+  border-color: rgba(249, 184, 76, 0.68);
+  color: rgba(32, 25, 8, 0.94);
+}
+
+.workspace__window-color[data-window-color='emerald']:focus,
+.workspace__window-color[data-window-color='emerald']:hover {
+  background: rgba(66, 211, 146, 0.22);
+  border-color: rgba(66, 211, 146, 0.65);
+  color: rgba(10, 40, 27, 0.92);
+}
+
+.workspace__window-color[data-window-color='rose']:focus,
+.workspace__window-color[data-window-color='rose']:hover {
+  background: rgba(255, 107, 145, 0.24);
+  border-color: rgba(255, 107, 145, 0.68);
+  color: rgba(45, 9, 21, 0.92);
+}
+
+.workspace__window-color[data-window-color='indigo']:focus,
+.workspace__window-color[data-window-color='indigo']:hover {
+  background: rgba(123, 139, 255, 0.24);
+  border-color: rgba(123, 139, 255, 0.68);
+  color: rgba(14, 18, 44, 0.94);
+}
+
 .workspace__window-duplicate {
   padding: 6px 12px;
   border-radius: 999px;
@@ -726,6 +809,71 @@ body {
   font-weight: 600;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
   pointer-events: none;
+}
+
+.workspace__window--color-neutral .workspace__window-header {
+  border-bottom-color: rgba(123, 139, 255, 0.18);
+}
+
+.workspace__window--color-neutral .workspace__window-status {
+  background: rgba(12, 16, 24, 0.82);
+  color: rgba(244, 245, 247, 0.92);
+}
+
+.workspace__window--color-amber {
+  border-color: rgba(249, 184, 76, 0.55);
+  box-shadow: 0 24px 60px rgba(249, 184, 76, 0.28);
+}
+
+.workspace__window--color-amber .workspace__window-header {
+  border-bottom-color: rgba(249, 184, 76, 0.4);
+}
+
+.workspace__window--color-amber .workspace__window-status {
+  background: rgba(249, 184, 76, 0.22);
+  color: rgba(43, 32, 4, 0.92);
+}
+
+.workspace__window--color-emerald {
+  border-color: rgba(66, 211, 146, 0.52);
+  box-shadow: 0 24px 60px rgba(66, 211, 146, 0.25);
+}
+
+.workspace__window--color-emerald .workspace__window-header {
+  border-bottom-color: rgba(66, 211, 146, 0.36);
+}
+
+.workspace__window--color-emerald .workspace__window-status {
+  background: rgba(66, 211, 146, 0.2);
+  color: rgba(10, 40, 27, 0.92);
+}
+
+.workspace__window--color-rose {
+  border-color: rgba(255, 107, 145, 0.55);
+  box-shadow: 0 24px 60px rgba(255, 107, 145, 0.28);
+}
+
+.workspace__window--color-rose .workspace__window-header {
+  border-bottom-color: rgba(255, 107, 145, 0.4);
+}
+
+.workspace__window--color-rose .workspace__window-status {
+  background: rgba(255, 107, 145, 0.24);
+  color: rgba(45, 9, 21, 0.9);
+}
+
+.workspace__window--color-indigo {
+  border-color: rgba(123, 139, 255, 0.55);
+  box-shadow: 0 24px 60px rgba(123, 139, 255, 0.32);
+}
+
+.workspace__window--color-indigo .workspace__window-header {
+  border-bottom-color: rgba(123, 139, 255, 0.45);
+}
+
+.workspace__window--color-indigo .workspace__window-status {
+  background: rgba(123, 139, 255, 0.24);
+  color: rgba(20, 24, 55, 0.92);
 }
 
 .workspace__window--pinned {

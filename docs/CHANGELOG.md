@@ -17,3 +17,4 @@
 - [2025-10-11 — ウィンドウメモとイベント通知](changelog/2025-10-11-window-notes.md)
 - [2025-10-11 — ウィンドウタイトル編集とイベント同期](changelog/2025-10-11-window-title.md)
 - [2025-10-11 — ページ履歴ナビゲーションの追加](changelog/2025-10-11-window-page-history.md)
+- [2025-10-11 — ウィンドウカラータグとイベント通知](changelog/2025-10-11-window-color-tags.md)

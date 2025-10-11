@@ -17,3 +17,4 @@
 - [2025-10-11: ウィンドウメモ運用の指針](decisions/2025-10-11-window-notes.md)
 - [2025-10-11: ウィンドウタイトル編集の体験設計](decisions/2025-10-11-window-title.md)
 - [2025-10-11: ページ履歴ナビゲーションの導入方針](decisions/2025-10-11-window-page-history.md)
+- [2025-10-11: ウィンドウカラータグとアクセント設計](decisions/2025-10-11-window-color-tags.md)
