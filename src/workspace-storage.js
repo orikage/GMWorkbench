@@ -1,6 +1,9 @@
 const DATABASE_NAME = 'gmworkbench';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'workspace-windows';
+const MAX_STORED_HISTORY = 50;
+const MAX_STORED_BOOKMARKS = 50;
+const ROTATION_STEP = 90;
 
 const memoryStore = new Map();
 let databasePromise = null;
@@ -62,6 +65,17 @@ function toBlob(file) {
   return Promise.reject(new TypeError('Provided file is not blob-compatible.'));
 }
 
+function normalizeRotation(value) {
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+
+  const rounded = Math.round(value / ROTATION_STEP) * ROTATION_STEP;
+  const wrapped = ((rounded % 360) + 360) % 360;
+  const normalized = wrapped === 360 ? 0 : wrapped;
+  return normalized;
+}
+
 function normalizeForStorage(state) {
   const normalized = { id: state.id };
 
@@ -101,6 +115,12 @@ function normalizeForStorage(state) {
     normalized.zoom = state.zoom;
   }
 
+  const rotation = normalizeRotation(state.rotation);
+
+  if (Number.isFinite(rotation)) {
+    normalized.rotation = rotation;
+  }
+
   if (Number.isFinite(state.totalPages)) {
     normalized.totalPages = state.totalPages;
   }
@@ -109,12 +129,104 @@ function normalizeForStorage(state) {
     normalized.pinned = state.pinned;
   }
 
+  if (typeof state.maximized === 'boolean') {
+    normalized.maximized = state.maximized;
+  }
+
+  if (Number.isFinite(state.restoreLeft)) {
+    normalized.restoreLeft = state.restoreLeft;
+  }
+
+  if (Number.isFinite(state.restoreTop)) {
+    normalized.restoreTop = state.restoreTop;
+  }
+
+  if (Number.isFinite(state.restoreWidth)) {
+    normalized.restoreWidth = state.restoreWidth;
+  }
+
+  if (Number.isFinite(state.restoreHeight)) {
+    normalized.restoreHeight = state.restoreHeight;
+  }
+
   if (Number.isFinite(state.openedAt)) {
     normalized.openedAt = state.openedAt;
   }
 
   if (Number.isFinite(state.lastFocusedAt)) {
     normalized.lastFocusedAt = state.lastFocusedAt;
+  }
+
+  if (typeof state.title === 'string' && state.title.length > 0) {
+    normalized.title = state.title;
+  }
+
+  if (typeof state.notes === 'string') {
+    normalized.notes = state.notes;
+  }
+
+  if (typeof state.color === 'string' && state.color.length > 0) {
+    normalized.color = state.color;
+  }
+
+  if (Array.isArray(state.bookmarks) && state.bookmarks.length > 0) {
+    const sanitized = state.bookmarks
+      .map((value) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : null))
+      .filter((value) => Number.isFinite(value));
+
+    if (sanitized.length > 0) {
+      const deduped = [];
+
+      sanitized
+        .sort((a, b) => a - b)
+        .forEach((value) => {
+          if (!deduped.includes(value)) {
+            deduped.push(value);
+          }
+        });
+
+      if (deduped.length > MAX_STORED_BOOKMARKS) {
+        normalized.bookmarks = deduped.slice(-MAX_STORED_BOOKMARKS);
+      } else {
+        normalized.bookmarks = deduped;
+      }
+    }
+  }
+
+  let history = [];
+  let trimmedOffset = 0;
+
+  if (Array.isArray(state.pageHistory) && state.pageHistory.length > 0) {
+    const sanitized = state.pageHistory
+      .map((value) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : null))
+      .filter((value) => Number.isFinite(value));
+
+    if (sanitized.length > 0) {
+      if (sanitized.length > MAX_STORED_HISTORY) {
+        trimmedOffset = sanitized.length - MAX_STORED_HISTORY;
+        history = sanitized.slice(-MAX_STORED_HISTORY);
+      } else {
+        history = sanitized;
+      }
+    }
+  }
+
+  let historyIndex;
+
+  if (Number.isFinite(state.pageHistoryIndex)) {
+    historyIndex = Math.max(0, Math.floor(state.pageHistoryIndex));
+
+    if (trimmedOffset > 0) {
+      historyIndex = Math.max(0, historyIndex - trimmedOffset);
+    }
+  }
+
+  if (history.length > 0) {
+    normalized.pageHistory = history;
+
+    if (Number.isFinite(historyIndex)) {
+      normalized.pageHistoryIndex = Math.min(history.length - 1, historyIndex);
+    }
   }
 
   if (state.data instanceof Blob) {
@@ -185,6 +297,31 @@ function normalizeFromStorage(record) {
     return null;
   }
 
+  const history =
+    Array.isArray(record.pageHistory) && record.pageHistory.length > 0
+      ? record.pageHistory
+          .map((value) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : null))
+          .filter((value) => Number.isFinite(value))
+      : [];
+
+  let historyIndex = Number.isFinite(record.pageHistoryIndex)
+    ? Math.max(0, Math.floor(record.pageHistoryIndex))
+    : undefined;
+
+  if (history.length === 0) {
+    historyIndex = undefined;
+  } else if (Number.isFinite(historyIndex) && historyIndex >= history.length) {
+    historyIndex = history.length - 1;
+  }
+
+  const bookmarks = Array.isArray(record.bookmarks)
+    ? record.bookmarks
+        .map((value) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : null))
+        .filter((value, index, array) => Number.isFinite(value) && array.indexOf(value) === index)
+        .sort((a, b) => a - b)
+        .slice(-MAX_STORED_BOOKMARKS)
+    : [];
+
   return {
     id: record.id,
     file,
@@ -197,12 +334,24 @@ function normalizeFromStorage(record) {
     height: Number.isFinite(record.height) ? record.height : undefined,
     page: Number.isFinite(record.page) ? record.page : undefined,
     zoom: Number.isFinite(record.zoom) ? record.zoom : undefined,
+    rotation: Number.isFinite(record.rotation) ? normalizeRotation(record.rotation) : undefined,
     totalPages: Number.isFinite(record.totalPages) ? record.totalPages : undefined,
     pinned: typeof record.pinned === 'boolean' ? record.pinned : undefined,
+    maximized: typeof record.maximized === 'boolean' ? record.maximized : undefined,
+    restoreLeft: Number.isFinite(record.restoreLeft) ? record.restoreLeft : undefined,
+    restoreTop: Number.isFinite(record.restoreTop) ? record.restoreTop : undefined,
+    restoreWidth: Number.isFinite(record.restoreWidth) ? record.restoreWidth : undefined,
+    restoreHeight: Number.isFinite(record.restoreHeight) ? record.restoreHeight : undefined,
     openedAt: Number.isFinite(record.openedAt) ? record.openedAt : undefined,
     lastFocusedAt: Number.isFinite(record.lastFocusedAt)
       ? record.lastFocusedAt
       : undefined,
+    title: typeof record.title === 'string' ? record.title : undefined,
+    notes: typeof record.notes === 'string' ? record.notes : '',
+    color: typeof record.color === 'string' ? record.color : undefined,
+    pageHistory: history.length > 0 ? history : undefined,
+    pageHistoryIndex: Number.isFinite(historyIndex) ? historyIndex : undefined,
+    bookmarks: bookmarks.length > 0 ? bookmarks : undefined,
     persisted: true,
   };
 }
