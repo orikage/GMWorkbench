@@ -12,6 +12,7 @@
 - [2025-10-12: タスク Issue 同期ワークフローを常設する判断](decisions/2025-10-12-task-issue-workflow.md)
 - [2025-10-12: タスク表から Issue を起こす運用](decisions/2025-10-12-task-issue-sync.md)
 - [2025-10-12: ワークスペースをモジュール化する方針](decisions/2025-10-12-workspace-modules.md)
+- [2025-10-12: ワークスペースイベント契約を型で管理する方針](decisions/2025-10-12-workspace-event-contract.md)
 - [2025-10-12: オンボーディングサンプル更新の方針](decisions/2025-10-12-sample-pdf-refresh.md)
 - [2025-10-12: オンボーディング完了フラグ導入の判断](decisions/2025-10-12-onboarding-preference.md)
 - [2025-10-12: スナップショット軽量化アプローチ](decisions/2025-10-12-snapshot-options.md)
