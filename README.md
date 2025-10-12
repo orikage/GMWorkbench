@@ -56,6 +56,36 @@ pnpm docs:print:decisions
 
 各エントリを分割することで、複数のブランチが同時に更新してもマージコンフリクトを最小化できます。
 
+## タスクから Issue を生成する
+
+`docs/TASKS.md` の表で **状態が「未着手」** の行は、CLI から GitHub Issue に変換できます。
+
+> ℹ️ `main` ブランチに変更が入ったときと毎日午前3時 (UTC) に、[Sync task issues ワークフロー](.github/workflows/task-issues.yml) が自動で CLI を実行し、未作成の Issue を補完します。手元で確認したい場合は以下のコマンドを使ってください。
+
+```bash
+# Dry run: 作成対象の一覧だけを表示
+pnpm tasks:issues --repo=orikage/GMWorkbench
+
+# 実際に Issue を作成
+GITHUB_TOKEN=ghp_xxx pnpm tasks:issues:apply --repo=orikage/GMWorkbench --labels=P2,meta
+```
+
+- `--repo` を省略すると `GITHUB_REPOSITORY` 環境変数が利用されます。
+- `--labels` で付与するラベルをカンマ区切り指定できます（省略可）。
+- 既に `[T-xxx]` を含むタイトルの Issue が存在する場合は重複作成されません。
+- Dry run 時はトークン不要、作成時は `GITHUB_TOKEN`（または `GH_TOKEN`）が必要です。
+
+Issue 作成後は、タスクが完了したタイミングで `docs/TASKS.md` のステータス更新と Issue のクローズをあわせて行ってください。
+
+## コード構成
+
+- `src/workspace/` — ワークスペース UI のモジュール群。`index.js` がエントリポイントで、ドロップゾーン・キュー・オンボーディング・メンテナンス・キャンバスを個別ファイルとして読み込みます。
+- `src/workspace/canvas.js` — ウィンドウ管理の中心ロジック。今後さらに `toolbar` や `search` などに分割する前提で、API をモジュール越しに共有しています。
+- `src/workspace/constants.js` / `src/workspace/utils.js` — イベント名やデフォルト値など、モジュール間で共有する値とユーティリティ。
+- `src/workspace/drop-zone.js` / `file-queue.js` / `onboarding.js` / `maintenance.js` / `chrome.js` — UI セクションごとに DOM を組み立て、`index.js` からコンポーズします。
+
+従来 1 ファイルに集約されていた 4,000 行規模のロジックを段階的に分割することで、差分の見通しとテスト観点の洗い出しを容易にしています。
+
 ## カスタムイベント
 
 ワークスペースは UI の節度を保つために DOM イベント経由で状態を外部へ通知します。

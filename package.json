@@ -10,7 +10,9 @@
     "test": "vitest run",
     "docs:print:changelog": "node scripts/docs/print-md-list.mjs docs/changelog",
     "docs:print:decisions": "node scripts/docs/print-md-list.mjs docs/decisions",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "tasks:issues": "node scripts/tasks/sync-issues.mjs",
+    "tasks:issues:apply": "node scripts/tasks/sync-issues.mjs --apply"
   },
   "dependencies": {
     "pdfjs-dist": "^5.4.296"

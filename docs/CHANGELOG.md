@@ -9,6 +9,9 @@
 4. 最新の一覧が必要なときは `docs/changelog/` を参照するか、`pnpm run docs:print:changelog` などの補助スクリプトで収集してください（スクリプトは任意）。
 
 ## 既存エントリ
+- [2025-10-12 — タスク Issue 同期ワークフロー](changelog/2025-10-12-task-issue-workflow.md)
+- [2025-10-12 — タスクの Issue 自動化](changelog/2025-10-12-task-issue-sync.md)
+- [2025-10-12 — ワークスペースのモジュール分割](changelog/2025-10-12-workspace-modules.md)
 - [2025-10-12 — オンボーディングサンプルの刷新](changelog/2025-10-12-sample-pdf-refresh.md)
 - [2025-10-12 — オンボーディング完了フラグとメンテナンス拡張](changelog/2025-10-12-onboarding-preference.md)
 - [2025-10-12 — スナップショット書き出しオプションの追加](changelog/2025-10-12-snapshot-options.md)
