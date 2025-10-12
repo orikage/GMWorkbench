@@ -26,17 +26,18 @@ import {
   WINDOW_DUPLICATE_EVENT,
   WINDOW_FOCUS_CYCLE_EVENT,
   WINDOW_MAXIMIZE_CHANGE_EVENT,
-  WINDOW_NOTES_CHANGE_EVENT,
   WINDOW_OUTLINE_JUMP_EVENT,
   WINDOW_PAGE_CHANGE_EVENT,
   WINDOW_PIN_TOGGLE_EVENT,
   WINDOW_ROTATION_CHANGE_EVENT,
-  WINDOW_SEARCH_EVENT,
   WINDOW_STACK_OFFSET,
   WINDOW_TITLE_CHANGE_EVENT,
   WINDOW_ZOOM_CHANGE_EVENT,
   WINDOW_ZOOM_STEP,
 } from './constants.js';
+import { createWindowNotes } from './window-notes.js';
+import { createWindowSearch } from './window-search.js';
+import { createWindowToolbar } from './window-toolbar.js';
 
 export function createWindowCanvas({ onWindowCountChange } = {}) {
   const section = document.createElement('section');
@@ -165,24 +166,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     }
 
     currentPage = pageHistory[pageHistoryIndex] ?? currentPage;
-    let pageInput;
-    let pageSlider;
-    let firstPageButton;
-    let prevButton;
-    let nextButton;
-    let lastPageButton;
-    let historyBackButton;
-    let historyForwardButton;
-    let zoomOutButton;
-    let zoomInButton;
-    let zoomResetButton;
-    let zoomDisplay;
-    let zoomFitWidthButton;
-    let zoomFitPageButton;
-    let rotateLeftButton;
-    let rotateRightButton;
-    let rotateResetButton;
-    let rotationDisplay;
     let currentZoom = Number.isFinite(options.zoom)
       ? Number.parseFloat(options.zoom)
       : DEFAULT_WINDOW_ZOOM;
@@ -192,27 +175,14 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       ? options.lastFocusedAt
       : openedAt;
     let hasStoredFile = options.persisted === true;
-    let notesContent = typeof options.notes === 'string' ? options.notes : '';
-    let notesTextarea;
-    let notesCounter;
     let bookmarksList;
     let bookmarksEmpty;
     let bookmarkAddButton;
     let bookmarkPrevButton;
     let bookmarkNextButton;
-    let searchForm;
-    let searchInput;
-    let searchSubmitButton;
-    let searchPrevButton;
-    let searchNextButton;
-    let searchSummary;
-    let searchStatus;
-    let searchList;
-    let searchResults = [];
-    let searchQuery = '';
-    let searchIndex = -1;
-    let searchLoading = false;
-    let searchAbortController = null;
+    let notesController;
+    let searchController;
+    let toolbarController;
     let outlineList;
     let outlineStatus;
     let outlineEntries = [];
@@ -378,7 +348,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       disposed = true;
 
-      cancelSearch();
+      searchController?.cancel();
 
       if (emitClose) {
         dispatchCloseEvent();
@@ -483,7 +453,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         openedAt,
         lastFocusedAt,
         title: windowTitle,
-        notes: notesContent,
+        notes: notesController?.getContent() ?? '',
         color: windowColor,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
@@ -530,32 +500,12 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     syncFocusMetadata();
 
-    const syncNotesMetadata = () => {
-      windowElement.dataset.notesLength = String(notesContent.length);
-    };
-
-    const syncNotesDisplay = () => {
-      if (notesTextarea && notesTextarea.value !== notesContent) {
-        notesTextarea.value = notesContent;
-      }
-
-      if (notesCounter) {
-        notesCounter.textContent = `${notesContent.length}文字`;
-      }
-
-      syncNotesMetadata();
-    };
-
     const syncRotationState = () => {
-      if (rotationDisplay) {
-        rotationDisplay.textContent = `${currentRotation}°`;
+      if (toolbarController) {
+        toolbarController.syncRotation(currentRotation);
+      } else {
+        windowElement.dataset.rotation = String(currentRotation);
       }
-
-      if (rotateResetButton) {
-        rotateResetButton.disabled = currentRotation === DEFAULT_WINDOW_ROTATION;
-      }
-
-      windowElement.dataset.rotation = String(currentRotation);
     };
 
     const updateViewerState = () => {
@@ -1058,67 +1008,21 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     };
 
     const syncNavigationState = () => {
-      if (pageInput) {
-        pageInput.value = String(currentPage);
-
-        if (Number.isFinite(totalPages)) {
-          pageInput.max = String(totalPages);
-        } else {
-          pageInput.removeAttribute('max');
-        }
-      }
-
-      if (firstPageButton) {
-        firstPageButton.disabled = currentPage <= 1;
-      }
-
-      if (prevButton) {
-        prevButton.disabled = currentPage <= 1;
-      }
-
-      if (nextButton) {
-        if (Number.isFinite(totalPages)) {
-          nextButton.disabled = currentPage >= totalPages;
-        } else {
-          nextButton.disabled = false;
-        }
-      }
-
-      if (lastPageButton) {
-        if (Number.isFinite(totalPages)) {
-          lastPageButton.disabled = currentPage >= totalPages;
-        } else {
-          lastPageButton.disabled = true;
-        }
-      }
-
-      if (historyBackButton) {
-        historyBackButton.disabled = !canStepHistoryBack();
-      }
-
-      if (historyForwardButton) {
-        historyForwardButton.disabled = !canStepHistoryForward();
-      }
-
-      if (pageSlider) {
-        pageSlider.value = String(currentPage);
-
-        if (Number.isFinite(totalPages)) {
-          const sliderMax = Math.max(1, Math.floor(totalPages));
-          pageSlider.max = String(sliderMax);
-          pageSlider.disabled = sliderMax <= 1;
-        } else {
-          pageSlider.removeAttribute('max');
-          pageSlider.disabled = true;
-        }
+      if (toolbarController) {
+        toolbarController.syncNavigation({
+          currentPage,
+          totalPages,
+          canHistoryBack: canStepHistoryBack(),
+          canHistoryForward: canStepHistoryForward(),
+          historyIndex: pageHistoryIndex,
+          historyLength: pageHistory.length,
+        });
       }
 
       windowElement.dataset.pageHistoryIndex = String(pageHistoryIndex);
       windowElement.dataset.pageHistoryLength = String(pageHistory.length);
       syncBookmarkControls();
     };
-
-    const isDefaultZoom = () => Math.abs(currentZoom - DEFAULT_WINDOW_ZOOM) < 0.001;
 
     const clampZoom = (value) => {
       if (!Number.isFinite(value)) {
@@ -1139,9 +1043,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     currentZoom = clampZoom(currentZoom);
     currentPage = clampPage(currentPage);
     clampHistoryToBounds();
-
-    const approxEqual = (a, b, tolerance = 0.01) =>
-      Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tolerance;
 
     const getViewerMetrics = () => {
       if (!viewer || typeof viewer.getViewportMetrics !== 'function') {
@@ -1281,25 +1182,18 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     };
 
     const syncZoomState = () => {
-      if (zoomDisplay) {
-        const percentage = Math.round(currentZoom * 100);
-        zoomDisplay.textContent = `${percentage}%`;
-      }
-
-      if (zoomOutButton) {
-        zoomOutButton.disabled = currentZoom <= MIN_WINDOW_ZOOM + 0.0001;
-      }
-
-      if (zoomInButton) {
-        zoomInButton.disabled = currentZoom >= MAX_WINDOW_ZOOM - 0.0001;
-      }
-
-      if (zoomResetButton) {
-        zoomResetButton.disabled = isDefaultZoom();
-      }
-
       const fitWidthZoom = computeFitZoom('width');
       const fitPageZoom = computeFitZoom('page');
+
+      if (toolbarController) {
+        toolbarController.syncZoom({
+          currentZoom,
+          zoomFitMode,
+          fitWidthZoom: Number.isFinite(fitWidthZoom) ? fitWidthZoom : null,
+          fitPageZoom: Number.isFinite(fitPageZoom) ? fitPageZoom : null,
+        });
+        return;
+      }
 
       if (Number.isFinite(fitWidthZoom)) {
         windowElement.dataset.zoomFitWidth = String(fitWidthZoom);
@@ -1311,34 +1205,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         windowElement.dataset.zoomFitPage = String(fitPageZoom);
       } else {
         delete windowElement.dataset.zoomFitPage;
-      }
-
-      if (zoomFitWidthButton) {
-        if (!Number.isFinite(fitWidthZoom)) {
-          zoomFitWidthButton.disabled = true;
-          zoomFitWidthButton.setAttribute('aria-pressed', 'false');
-        } else {
-          const matches = approxEqual(currentZoom, fitWidthZoom);
-          zoomFitWidthButton.disabled = matches;
-          zoomFitWidthButton.setAttribute(
-            'aria-pressed',
-            zoomFitMode === 'fit-width' && matches ? 'true' : 'false',
-          );
-        }
-      }
-
-      if (zoomFitPageButton) {
-        if (!Number.isFinite(fitPageZoom)) {
-          zoomFitPageButton.disabled = true;
-          zoomFitPageButton.setAttribute('aria-pressed', 'false');
-        } else {
-          const matches = approxEqual(currentZoom, fitPageZoom);
-          zoomFitPageButton.disabled = matches;
-          zoomFitPageButton.setAttribute(
-            'aria-pressed',
-            zoomFitMode === 'fit-page' && matches ? 'true' : 'false',
-          );
-        }
       }
     };
 
@@ -1530,280 +1396,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     const resetRotation = () => {
       commitRotationChange(DEFAULT_WINDOW_ROTATION);
-    };
-
-    const emitSearchEvent = (action) => {
-      const activeResult = searchIndex >= 0 ? searchResults[searchIndex] : null;
-      const searchEvent = new CustomEvent(WINDOW_SEARCH_EVENT, {
-        bubbles: true,
-        detail: {
-          file,
-          query: searchQuery,
-          action,
-          totalResults: searchResults.length,
-          index: searchIndex >= 0 ? searchIndex : null,
-          page: Number.isFinite(activeResult?.page) ? activeResult.page : undefined,
-        },
-      });
-
-      windowElement.dispatchEvent(searchEvent);
-    };
-
-    const syncSearchMetadata = () => {
-      if (searchQuery) {
-        windowElement.dataset.searchQuery = searchQuery;
-      } else {
-        delete windowElement.dataset.searchQuery;
-      }
-
-      if (searchResults.length > 0) {
-        windowElement.dataset.searchCount = String(searchResults.length);
-      } else {
-        delete windowElement.dataset.searchCount;
-      }
-
-      if (searchIndex >= 0) {
-        windowElement.dataset.searchIndex = String(searchIndex);
-      } else {
-        delete windowElement.dataset.searchIndex;
-      }
-
-      if (searchLoading) {
-        windowElement.dataset.searchLoading = 'true';
-      } else {
-        delete windowElement.dataset.searchLoading;
-      }
-    };
-
-    const updateSearchSummary = () => {
-      if (!searchSummary) {
-        return;
-      }
-
-      if (!searchQuery) {
-        searchSummary.textContent = '検索結果: 0 件';
-        return;
-      }
-
-      if (searchResults.length === 0) {
-        searchSummary.textContent = '検索結果: 0 件';
-        return;
-      }
-
-      const current = searchIndex >= 0 ? searchIndex + 1 : 1;
-      searchSummary.textContent = `検索結果: ${current} / ${searchResults.length} 件`;
-    };
-
-    const updateSearchControls = () => {
-      const disabled = searchLoading || searchResults.length === 0;
-
-      if (searchPrevButton) {
-        searchPrevButton.disabled = disabled;
-      }
-
-      if (searchNextButton) {
-        searchNextButton.disabled = disabled;
-      }
-    };
-
-    const setSearchLoading = (loading) => {
-      searchLoading = loading;
-      syncSearchMetadata();
-
-      if (searchSubmitButton) {
-        searchSubmitButton.disabled = loading;
-      }
-
-      if (searchInput) {
-        if (loading) {
-          searchInput.setAttribute('aria-busy', 'true');
-        } else {
-          searchInput.removeAttribute('aria-busy');
-        }
-      }
-
-      updateSearchControls();
-    };
-
-    const renderSearchResults = () => {
-      if (!searchList) {
-        return;
-      }
-
-      searchList.replaceChildren();
-
-      if (!searchQuery) {
-        const placeholder = document.createElement('li');
-        placeholder.className = 'workspace__window-search-empty';
-        placeholder.textContent = '検索キーワードを入力してください。';
-        searchList.append(placeholder);
-        return;
-      }
-
-      if (searchResults.length === 0) {
-        const empty = document.createElement('li');
-        empty.className = 'workspace__window-search-empty';
-        empty.textContent = '一致する結果は見つかりませんでした。';
-        searchList.append(empty);
-        return;
-      }
-
-      searchResults.forEach((result, index) => {
-        const item = document.createElement('li');
-        item.className = 'workspace__window-search-result';
-        item.dataset.index = String(index);
-
-        if (index === searchIndex) {
-          item.classList.add('workspace__window-search-result--active');
-        }
-
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'workspace__window-search-result-button';
-        button.addEventListener('click', () => {
-          bringToFront({ persistFocus: false });
-          goToSearchResult(index, { source: 'result' });
-        });
-
-        const pageBadge = document.createElement('span');
-        pageBadge.className = 'workspace__window-search-result-page';
-        pageBadge.textContent = Number.isFinite(result?.page)
-          ? `p.${result.page}`
-          : '—';
-
-        const context = document.createElement('span');
-        context.className = 'workspace__window-search-result-context';
-        context.textContent = typeof result?.context === 'string' ? result.context : '';
-
-        button.append(pageBadge, context);
-        item.append(button);
-        searchList.append(item);
-      });
-    };
-
-    const clearSearchResults = () => {
-      searchResults = [];
-      searchIndex = -1;
-      syncSearchMetadata();
-      updateSearchSummary();
-      updateSearchControls();
-      renderSearchResults();
-
-      if (searchStatus) {
-        searchStatus.hidden = true;
-        searchStatus.textContent = '';
-        searchStatus.classList.remove('workspace__window-search-status--error');
-      }
-    };
-
-    const goToSearchResult = (index, { source = 'navigate', emitEvent = true } = {}) => {
-      if (searchResults.length === 0) {
-        updateSearchSummary();
-        updateSearchControls();
-        renderSearchResults();
-        return;
-      }
-
-      const normalizedIndex = ((Number.isFinite(index) ? Math.trunc(index) : 0) %
-        searchResults.length +
-        searchResults.length) %
-        searchResults.length;
-
-      searchIndex = normalizedIndex;
-      syncSearchMetadata();
-      updateSearchSummary();
-      updateSearchControls();
-      renderSearchResults();
-
-      const target = searchResults[searchIndex];
-
-      if (target && Number.isFinite(target.page)) {
-        commitPageChange(target.page);
-      }
-
-      if (emitEvent) {
-        emitSearchEvent(source);
-      }
-    };
-
-    const cancelSearch = () => {
-      if (searchAbortController) {
-        searchAbortController.abort();
-        searchAbortController = null;
-      }
-
-      setSearchLoading(false);
-    };
-
-    const performSearch = async (query) => {
-      const sanitized = typeof query === 'string' ? query.trim() : '';
-      searchQuery = sanitized;
-      syncSearchMetadata();
-
-      cancelSearch();
-
-      if (!sanitized) {
-        clearSearchResults();
-        return;
-      }
-
-      const controller = new AbortController();
-      searchAbortController = controller;
-      setSearchLoading(true);
-
-      if (searchStatus) {
-        searchStatus.hidden = false;
-        searchStatus.textContent = '検索中…';
-        searchStatus.classList.remove('workspace__window-search-status--error');
-      }
-
-      try {
-        const results = await viewer.search(sanitized, { signal: controller.signal });
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        searchResults = Array.isArray(results) ? results.slice(0, 200) : [];
-        searchIndex = searchResults.length > 0 ? 0 : -1;
-        syncSearchMetadata();
-
-        if (searchResults.length === 0) {
-          updateSearchSummary();
-          updateSearchControls();
-          renderSearchResults();
-
-          if (searchStatus) {
-            searchStatus.hidden = false;
-            searchStatus.textContent = '一致する結果は見つかりませんでした。';
-          }
-        } else {
-          goToSearchResult(searchIndex, { emitEvent: false, source: 'search' });
-
-          if (searchStatus) {
-            searchStatus.hidden = true;
-            searchStatus.textContent = '';
-          }
-        }
-
-        emitSearchEvent('search');
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        if (searchStatus) {
-          searchStatus.hidden = false;
-          searchStatus.textContent = '検索に失敗しました。';
-          searchStatus.classList.add('workspace__window-search-status--error');
-        }
-      } finally {
-        if (searchAbortController === controller) {
-          searchAbortController = null;
-        }
-
-        setSearchLoading(false);
-      }
     };
 
     const syncOutlineMetadata = () => {
@@ -2017,73 +1609,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       pinButton.setAttribute('aria-label', `${windowTitle} を前面に固定`);
       duplicateButton.setAttribute('aria-label', `${windowTitle} を別ウィンドウで複製`);
 
-      if (notesTextarea) {
-        notesTextarea.setAttribute('aria-label', `${windowTitle} のメモ`);
-      }
-
-      if (pageForm) {
-        pageForm.setAttribute('aria-label', `${windowTitle} の表示ページを設定`);
-      }
-
-      if (pageInput) {
-        pageInput.setAttribute('aria-label', `${windowTitle} の表示ページ番号`);
-      }
-
-      if (historyBackButton) {
-        historyBackButton.setAttribute('aria-label', `${windowTitle} のページ履歴を戻る`);
-      }
-
-      if (historyForwardButton) {
-        historyForwardButton.setAttribute('aria-label', `${windowTitle} のページ履歴を進む`);
-      }
-
-      if (firstPageButton) {
-        firstPageButton.setAttribute('aria-label', `${windowTitle} の最初のページへ移動`);
-      }
-
-      if (prevButton) {
-        prevButton.setAttribute('aria-label', `${windowTitle} の前のページへ移動`);
-      }
-
-      if (nextButton) {
-        nextButton.setAttribute('aria-label', `${windowTitle} の次のページへ移動`);
-      }
-
-      if (lastPageButton) {
-        lastPageButton.setAttribute('aria-label', `${windowTitle} の最後のページへ移動`);
-      }
-
-      if (zoomOutButton) {
-        zoomOutButton.setAttribute('aria-label', `${windowTitle} を縮小表示`);
-      }
-
-      if (zoomInButton) {
-        zoomInButton.setAttribute('aria-label', `${windowTitle} を拡大表示`);
-      }
-
-      if (zoomResetButton) {
-        zoomResetButton.setAttribute('aria-label', `${windowTitle} の表示倍率をリセット`);
-      }
-
-      if (zoomFitWidthButton) {
-        zoomFitWidthButton.setAttribute('aria-label', `${windowTitle} を幅に合わせて表示`);
-      }
-
-      if (zoomFitPageButton) {
-        zoomFitPageButton.setAttribute('aria-label', `${windowTitle} を全体が収まるよう表示`);
-      }
-
-      if (rotateLeftButton) {
-        rotateLeftButton.setAttribute('aria-label', `${windowTitle} を反時計回りに回転`);
-      }
-
-      if (rotateRightButton) {
-        rotateRightButton.setAttribute('aria-label', `${windowTitle} を時計回りに回転`);
-      }
-
-      if (rotateResetButton) {
-        rotateResetButton.setAttribute('aria-label', `${windowTitle} の回転をリセット`);
-      }
+      notesController?.updateTitle(windowTitle);
+      toolbarController?.updateLabels(windowTitle);
 
       if (maximizeButton) {
         const label = isMaximized
@@ -2222,7 +1749,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         rotation: currentRotation,
         totalPages,
         pinned: isPinned(),
-        notes: notesContent,
+        notes: notesController?.getContent() ?? '',
         title: windowTitle,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
@@ -2249,7 +1776,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
           totalPages,
           sourceId: windowId,
           duplicateId: duplicateElement.dataset?.windowId,
-          notes: notesContent,
+          notes: notesController?.getContent() ?? '',
           title: windowTitle,
           color: windowColor,
           maximized: isMaximized,
@@ -2281,92 +1808,33 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     const body = document.createElement('div');
     body.className = 'workspace__window-body';
 
-    const toolbar = document.createElement('div');
-    toolbar.className = 'workspace__window-toolbar';
-
-    const searchSection = document.createElement('section');
-    searchSection.className = 'workspace__window-search';
-
-    searchForm = document.createElement('form');
-    searchForm.className = 'workspace__window-search-form';
-    searchForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      performSearch(searchInput?.value ?? '');
+    toolbarController = createWindowToolbar({
+      windowElement,
+      bringToFront,
+      sanitizePageValue,
+      commitPageChange,
+      stepPage,
+      goToFirstPage,
+      goToLastPage,
+      navigateHistory,
+      stepRotation,
+      resetRotation,
+      stepZoom,
+      resetZoom,
+      computeFitZoom,
+      commitZoomChange,
+      onSyncRequest: () => syncNavigationState(),
     });
+    const toolbar = toolbarController.element;
 
-    const searchInputId = `workspace-window-search-${Math.random()
-      .toString(36)
-      .slice(2, 9)}`;
-
-    searchInput = document.createElement('input');
-    searchInput.type = 'search';
-    searchInput.className = 'workspace__window-search-input';
-    searchInput.id = searchInputId;
-    searchInput.placeholder = 'キーワードを検索';
-    searchInput.autocomplete = 'off';
-    searchInput.setAttribute('aria-label', 'PDF内のテキストを検索');
-    searchInput.addEventListener('focus', () => {
-      bringToFront({ persistFocus: false });
+    searchController = createWindowSearch({
+      file,
+      windowElement,
+      viewer,
+      commitPageChange,
+      bringToFront,
     });
-
-    searchSubmitButton = document.createElement('button');
-    searchSubmitButton.type = 'submit';
-    searchSubmitButton.className = 'workspace__window-search-submit';
-    searchSubmitButton.textContent = '検索';
-    searchSubmitButton.addEventListener('focus', () => {
-      bringToFront({ persistFocus: false });
-    });
-
-    const searchInputs = document.createElement('div');
-    searchInputs.className = 'workspace__window-search-inputs';
-    searchInputs.append(searchInput, searchSubmitButton);
-
-    searchPrevButton = document.createElement('button');
-    searchPrevButton.type = 'button';
-    searchPrevButton.className = 'workspace__window-search-prev';
-    searchPrevButton.textContent = '前へ';
-    searchPrevButton.addEventListener('click', () => {
-      bringToFront({ persistFocus: false });
-      goToSearchResult(searchIndex - 1, { source: 'previous' });
-    });
-    searchPrevButton.addEventListener('focus', () => {
-      bringToFront({ persistFocus: false });
-    });
-
-    searchNextButton = document.createElement('button');
-    searchNextButton.type = 'button';
-    searchNextButton.className = 'workspace__window-search-next';
-    searchNextButton.textContent = '次へ';
-    searchNextButton.addEventListener('click', () => {
-      bringToFront({ persistFocus: false });
-      goToSearchResult(searchIndex + 1, { source: 'next' });
-    });
-    searchNextButton.addEventListener('focus', () => {
-      bringToFront({ persistFocus: false });
-    });
-
-    searchSummary = document.createElement('span');
-    searchSummary.className = 'workspace__window-search-summary';
-
-    const searchNavigation = document.createElement('div');
-    searchNavigation.className = 'workspace__window-search-navigation';
-    searchNavigation.append(searchPrevButton, searchNextButton, searchSummary);
-
-    searchStatus = document.createElement('p');
-    searchStatus.className = 'workspace__window-search-status';
-    searchStatus.hidden = true;
-
-    searchList = document.createElement('ul');
-    searchList.className = 'workspace__window-search-results';
-    searchList.setAttribute('role', 'list');
-
-    searchForm.append(searchInputs, searchNavigation);
-    searchSection.append(searchForm, searchStatus, searchList);
-
-    renderSearchResults();
-    updateSearchSummary();
-    updateSearchControls();
-    syncSearchMetadata();
+    const searchSection = searchController.element;
 
     const bookmarksSection = document.createElement('section');
     bookmarksSection.className = 'workspace__window-bookmarks';
@@ -2439,292 +1907,14 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     bookmarksSection.append(bookmarksHeader, bookmarkStatus, bookmarksEmpty, bookmarksList);
 
-    const notesSection = document.createElement('section');
-    notesSection.className = 'workspace__window-notes';
-
-    const notesHeader = document.createElement('div');
-    notesHeader.className = 'workspace__window-notes-header';
-
-    const notesInputId = `workspace-window-notes-${Math.random()
-      .toString(36)
-      .slice(2, 9)}`;
-
-    const notesLabel = document.createElement('label');
-    notesLabel.className = 'workspace__window-notes-label';
-    notesLabel.setAttribute('for', notesInputId);
-    notesLabel.textContent = 'メモ';
-
-    notesCounter = document.createElement('span');
-    notesCounter.className = 'workspace__window-notes-counter';
-
-    notesTextarea = document.createElement('textarea');
-    notesTextarea.className = 'workspace__window-notes-input';
-    notesTextarea.id = notesInputId;
-    notesTextarea.rows = 4;
-    notesTextarea.placeholder = 'シーンの補足やアドリブ案をメモできます。';
-    notesTextarea.value = notesContent;
-    notesTextarea.addEventListener('focus', () => {
-      bringToFront();
+    notesController = createWindowNotes({
+      file,
+      windowElement,
+      initialContent: typeof options.notes === 'string' ? options.notes : '',
+      bringToFront,
+      onPersistRequest: () => schedulePersist(),
     });
-    notesTextarea.addEventListener('input', () => {
-      const nextContent = notesTextarea?.value ?? '';
-
-      if (nextContent === notesContent) {
-        return;
-      }
-
-      notesContent = nextContent;
-      syncNotesDisplay();
-      const notesEvent = new CustomEvent(WINDOW_NOTES_CHANGE_EVENT, {
-        bubbles: true,
-        detail: { file, notes: notesContent },
-      });
-      windowElement.dispatchEvent(notesEvent);
-      schedulePersist();
-    });
-
-    notesHeader.append(notesLabel, notesCounter);
-    notesSection.append(notesHeader, notesTextarea);
-
-    const pageForm = document.createElement('form');
-    pageForm.className = 'workspace__window-page';
-
-    const requestPageChange = () => {
-      if (!pageInput) {
-        return;
-      }
-
-      const sanitized = sanitizePageValue(pageInput.value);
-
-      if (sanitized === null) {
-        syncNavigationState();
-        return;
-      }
-
-      commitPageChange(sanitized);
-    };
-
-    pageForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      requestPageChange();
-    });
-
-    const pageInputId = `workspace-window-page-${Math.random()
-      .toString(36)
-      .slice(2, 9)}`;
-
-    const pageLabel = document.createElement('label');
-    pageLabel.className = 'workspace__window-page-label';
-    pageLabel.setAttribute('for', pageInputId);
-    pageLabel.textContent = 'ページ';
-
-    pageInput = document.createElement('input');
-    pageInput.type = 'number';
-    pageInput.inputMode = 'numeric';
-    pageInput.pattern = '[0-9]*';
-    pageInput.min = '1';
-    pageInput.id = pageInputId;
-    pageInput.className = 'workspace__window-page-input';
-    pageInput.value = String(currentPage);
-    pageInput.addEventListener('change', requestPageChange);
-    pageInput.addEventListener('blur', syncNavigationState);
-    pageInput.addEventListener('focus', () => {
-      bringToFront();
-      pageInput?.select();
-    });
-
-    firstPageButton = document.createElement('button');
-    firstPageButton.type = 'button';
-    firstPageButton.className = 'workspace__window-nav workspace__window-nav--first';
-    firstPageButton.textContent = '⏮';
-    firstPageButton.addEventListener('click', () => {
-      goToFirstPage();
-    });
-
-    historyBackButton = document.createElement('button');
-    historyBackButton.type = 'button';
-    historyBackButton.className = 'workspace__window-nav workspace__window-nav--history-back';
-    historyBackButton.textContent = '戻';
-    historyBackButton.addEventListener('click', () => {
-      navigateHistory(-1);
-    });
-
-    prevButton = document.createElement('button');
-    prevButton.type = 'button';
-    prevButton.className = 'workspace__window-nav workspace__window-nav--previous';
-    prevButton.textContent = '−';
-    prevButton.addEventListener('click', () => {
-      stepPage(-1);
-    });
-
-    nextButton = document.createElement('button');
-    nextButton.type = 'button';
-    nextButton.className = 'workspace__window-nav workspace__window-nav--next';
-    nextButton.textContent = '+';
-    nextButton.addEventListener('click', () => {
-      stepPage(1);
-    });
-
-    historyForwardButton = document.createElement('button');
-    historyForwardButton.type = 'button';
-    historyForwardButton.className = 'workspace__window-nav workspace__window-nav--history-forward';
-    historyForwardButton.textContent = '進';
-    historyForwardButton.addEventListener('click', () => {
-      navigateHistory(1);
-    });
-
-    lastPageButton = document.createElement('button');
-    lastPageButton.type = 'button';
-    lastPageButton.className = 'workspace__window-nav workspace__window-nav--last';
-    lastPageButton.textContent = '⏭';
-    lastPageButton.addEventListener('click', () => {
-      goToLastPage();
-    });
-
-    pageForm.append(pageLabel, pageInput);
-
-    pageSlider = document.createElement('input');
-    pageSlider.type = 'range';
-    pageSlider.className = 'workspace__window-page-slider';
-    pageSlider.min = '1';
-    pageSlider.step = '1';
-    pageSlider.value = String(currentPage);
-    pageSlider.setAttribute('aria-label', 'ページスライダー');
-    pageSlider.addEventListener('focus', () => {
-      bringToFront();
-    });
-    pageSlider.addEventListener('input', () => {
-      const parsed = Number.parseInt(pageSlider.value, 10);
-
-      if (!Number.isFinite(parsed)) {
-        syncNavigationState();
-        return;
-      }
-
-      commitPageChange(parsed);
-    });
-
-    const rotationGroup = document.createElement('div');
-    rotationGroup.className = 'workspace__window-rotation';
-
-    rotateLeftButton = document.createElement('button');
-    rotateLeftButton.type = 'button';
-    rotateLeftButton.className =
-      'workspace__window-rotation-control workspace__window-rotation-control--left';
-    rotateLeftButton.textContent = '↺';
-    rotateLeftButton.addEventListener('click', () => {
-      stepRotation(-1);
-    });
-
-    rotationDisplay = document.createElement('span');
-    rotationDisplay.className = 'workspace__window-rotation-display';
-    rotationDisplay.setAttribute('aria-live', 'polite');
-
-    rotateRightButton = document.createElement('button');
-    rotateRightButton.type = 'button';
-    rotateRightButton.className =
-      'workspace__window-rotation-control workspace__window-rotation-control--right';
-    rotateRightButton.textContent = '↻';
-    rotateRightButton.addEventListener('click', () => {
-      stepRotation(1);
-    });
-
-    rotateResetButton = document.createElement('button');
-    rotateResetButton.type = 'button';
-    rotateResetButton.className = 'workspace__window-rotation-reset';
-    rotateResetButton.textContent = '0°';
-    rotateResetButton.addEventListener('click', () => {
-      resetRotation();
-    });
-
-    rotationGroup.append(
-      rotateLeftButton,
-      rotationDisplay,
-      rotateRightButton,
-      rotateResetButton,
-    );
-
-    const zoomGroup = document.createElement('div');
-    zoomGroup.className = 'workspace__window-zoom';
-
-    zoomOutButton = document.createElement('button');
-    zoomOutButton.type = 'button';
-    zoomOutButton.className = 'workspace__window-zoom-control workspace__window-zoom-control--out';
-    zoomOutButton.textContent = '縮小';
-    zoomOutButton.addEventListener('click', () => {
-      stepZoom(-WINDOW_ZOOM_STEP);
-    });
-
-    zoomDisplay = document.createElement('span');
-    zoomDisplay.className = 'workspace__window-zoom-display';
-    zoomDisplay.setAttribute('aria-live', 'polite');
-
-    zoomInButton = document.createElement('button');
-    zoomInButton.type = 'button';
-    zoomInButton.className = 'workspace__window-zoom-control workspace__window-zoom-control--in';
-    zoomInButton.textContent = '拡大';
-    zoomInButton.addEventListener('click', () => {
-      stepZoom(WINDOW_ZOOM_STEP);
-    });
-
-    zoomResetButton = document.createElement('button');
-    zoomResetButton.type = 'button';
-    zoomResetButton.className = 'workspace__window-zoom-reset';
-    zoomResetButton.textContent = '100%';
-    zoomResetButton.addEventListener('click', () => {
-      resetZoom();
-    });
-
-    zoomFitWidthButton = document.createElement('button');
-    zoomFitWidthButton.type = 'button';
-    zoomFitWidthButton.className = 'workspace__window-zoom-fit workspace__window-zoom-fit--width';
-    zoomFitWidthButton.textContent = '幅合わせ';
-    zoomFitWidthButton.setAttribute('aria-pressed', 'false');
-    zoomFitWidthButton.addEventListener('click', () => {
-      const target = computeFitZoom('width');
-
-      if (Number.isFinite(target)) {
-        commitZoomChange(target, { mode: 'fit-width' });
-      }
-    });
-
-    zoomFitPageButton = document.createElement('button');
-    zoomFitPageButton.type = 'button';
-    zoomFitPageButton.className = 'workspace__window-zoom-fit workspace__window-zoom-fit--page';
-    zoomFitPageButton.textContent = '全体表示';
-    zoomFitPageButton.setAttribute('aria-pressed', 'false');
-    zoomFitPageButton.addEventListener('click', () => {
-      const target = computeFitZoom('page');
-
-      if (Number.isFinite(target)) {
-        commitZoomChange(target, { mode: 'fit-page' });
-      }
-    });
-
-    zoomGroup.append(
-      zoomOutButton,
-      zoomDisplay,
-      zoomInButton,
-      zoomResetButton,
-      zoomFitWidthButton,
-      zoomFitPageButton,
-    );
-
-    const adjustmentsGroup = document.createElement('div');
-    adjustmentsGroup.className = 'workspace__window-adjustments';
-    adjustmentsGroup.append(rotationGroup, zoomGroup);
-
-    toolbar.append(
-      firstPageButton,
-      historyBackButton,
-      prevButton,
-      pageForm,
-      pageSlider,
-      nextButton,
-      historyForwardButton,
-      lastPageButton,
-      adjustmentsGroup,
-    );
+    const notesSection = notesController.element;
 
     const outlineSection = document.createElement('section');
     outlineSection.className = 'workspace__window-outline';
@@ -2762,7 +1952,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     syncBookmarksDisplay();
     syncNavigationState();
     syncZoomState();
-    syncNotesDisplay();
+    notesController.sync();
     updateViewerState();
 
     void viewer
@@ -2878,10 +2068,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         event.preventDefault();
         bringToFront();
 
-        if (searchInput) {
-          searchInput.focus();
-          searchInput.select();
-        }
+        searchController?.focusInput?.();
 
         return;
       }
