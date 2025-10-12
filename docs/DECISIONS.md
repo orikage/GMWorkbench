@@ -9,6 +9,7 @@
 4. 一覧はディレクトリを参照するか、`pnpm run docs:print:decisions` などの補助スクリプトで取得します。
 
 ## 既存エントリ
+- [2025-10-12: バックログ更新の方針](decisions/2025-10-12-backlog-refresh.md)
 - [2025-10-11: キャッシュ全削除 UI の導入](decisions/2025-10-11-cache-maintenance.md)
 - [2025-10-11: ワークスペースと永続化の意思決定](decisions/2025-10-11-workspace-and-storage.md)
 - [2025-10-11: ドキュメント分割でコンフリクトを避ける](decisions/2025-10-11-docs-conflict-mitigation.md)
