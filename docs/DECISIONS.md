@@ -9,6 +9,14 @@
 4. 一覧はディレクトリを参照するか、`pnpm run docs:print:decisions` などの補助スクリプトで取得します。
 
 ## 既存エントリ
+- [2025-10-12: オンボーディングサンプル更新の方針](decisions/2025-10-12-sample-pdf-refresh.md)
+- [2025-10-12: オンボーディング完了フラグ導入の判断](decisions/2025-10-12-onboarding-preference.md)
+- [2025-10-12: スナップショット軽量化アプローチ](decisions/2025-10-12-snapshot-options.md)
+- [2025-10-12: E2E カバレッジ拡張方針](decisions/2025-10-12-e2e-expansion.md)
+- [2025-10-12: E2E テスト自動化の導入判断](decisions/2025-10-12-e2e-tests.md)
+- [2025-10-12: セッション書き出し/読み込みの導入判断](decisions/2025-10-12-session-export-import.md)
+- [2025-10-12: PDF内検索とアウトライン導入の判断](decisions/2025-10-12-search-outline.md)
+- [2025-10-12: 初回オンボーディング導入の判断](decisions/2025-10-12-initial-onboarding.md)
 - [2025-10-12: バックログ更新の方針](decisions/2025-10-12-backlog-refresh.md)
 - [2025-10-11: キャッシュ全削除 UI の導入](decisions/2025-10-11-cache-maintenance.md)
 - [2025-10-11: ワークスペースと永続化の意思決定](decisions/2025-10-11-workspace-and-storage.md)

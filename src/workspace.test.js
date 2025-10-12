@@ -1,11 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const pdfMocks = vi.hoisted(() => {
-  const state = { numPages: 4 };
+  const state = {
+    numPages: 4,
+    textByPage: new Map(),
+    outline: [],
+    namedDestinations: {},
+    pageRefs: [],
+    pageIndex: new Map(),
+  };
   const renderMock = vi.fn();
   const getPageMock = vi.fn();
   const destroyMock = vi.fn();
   const getDocumentMock = vi.fn();
+  const getOutlineMock = vi.fn();
+  const getDestinationMock = vi.fn();
+  const getPageIndexMock = vi.fn();
 
   return {
     state,
@@ -13,6 +23,9 @@ const pdfMocks = vi.hoisted(() => {
     getPageMock,
     destroyMock,
     getDocumentMock,
+    getOutlineMock,
+    getDestinationMock,
+    getPageIndexMock,
   };
 });
 
@@ -21,14 +34,27 @@ const storageMocks = vi.hoisted(() => {
   const persist = vi.fn();
   const remove = vi.fn();
   const clear = vi.fn();
+  const exportSnapshot = vi.fn();
+  const importSnapshot = vi.fn();
+  const loadPreferences = vi.fn();
+  const persistPreference = vi.fn();
 
   return {
     load,
     persist,
     remove,
     clear,
+    exportSnapshot,
+    importSnapshot,
+    loadPreferences,
+    persistPreference,
   };
 });
+
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+let createObjectURLSpy;
+let revokeObjectURLSpy;
 
 vi.mock('pdfjs-dist', () => ({
   getDocument: pdfMocks.getDocumentMock,
@@ -48,6 +74,10 @@ vi.mock('./workspace-storage.js', () => ({
   persistWorkspaceWindow: storageMocks.persist,
   removeWorkspaceWindow: storageMocks.remove,
   clearWorkspaceWindows: storageMocks.clear,
+  loadWorkspacePreferences: storageMocks.loadPreferences,
+  persistWorkspacePreference: storageMocks.persistPreference,
+  exportWorkspaceSnapshot: storageMocks.exportSnapshot,
+  importWorkspaceSnapshot: storageMocks.importSnapshot,
 }));
 
 import { createWorkspace } from './workspace.js';
@@ -83,39 +113,109 @@ const openWindow = async (workspace, file, options = {}) => {
 
 beforeEach(() => {
   pdfMocks.state.numPages = 4;
+  pdfMocks.state.textByPage = new Map([
+    [1, 'keyword alpha introduction body'],
+    [2, 'supporting keyword beta details for search'],
+    [3, 'intermission without matches'],
+    [4, 'finale gamma keyword for outline'],
+  ]);
+  const pageRefs = Array.from({ length: pdfMocks.state.numPages }, (_, index) => ({
+    num: index + 1,
+    gen: 0,
+  }));
+  pdfMocks.state.pageRefs = pageRefs;
+  pdfMocks.state.pageIndex = new Map(pageRefs.map((ref, index) => [ref, index]));
+  pdfMocks.state.namedDestinations = {
+    intro: [pageRefs[0]],
+    finale: [pageRefs[3]],
+  };
+  pdfMocks.state.outline = [
+    { title: 'イントロダクション', dest: 'intro', items: [] },
+    { title: 'クライマックス', dest: [pageRefs[3]], items: [] },
+  ];
   pdfMocks.renderMock.mockReset();
   pdfMocks.getPageMock.mockReset();
   pdfMocks.getDocumentMock.mockReset();
   pdfMocks.destroyMock.mockReset();
+  pdfMocks.getOutlineMock.mockReset();
+  pdfMocks.getDestinationMock.mockReset();
+  pdfMocks.getPageIndexMock.mockReset();
 
   storageMocks.load.mockReset();
   storageMocks.persist.mockReset();
   storageMocks.remove.mockReset();
   storageMocks.clear.mockReset();
+  storageMocks.exportSnapshot.mockReset();
+  storageMocks.importSnapshot.mockReset();
+  storageMocks.loadPreferences.mockReset();
+  storageMocks.persistPreference.mockReset();
 
   storageMocks.load.mockResolvedValue([]);
   storageMocks.persist.mockResolvedValue();
   storageMocks.remove.mockResolvedValue();
   storageMocks.clear.mockResolvedValue();
+  storageMocks.loadPreferences.mockResolvedValue({});
+  storageMocks.persistPreference.mockResolvedValue();
+  storageMocks.exportSnapshot.mockResolvedValue({
+    blob: new Blob([JSON.stringify({ version: 1, windows: [] })], {
+      type: 'application/json',
+    }),
+    windows: 0,
+    compression: 'none',
+  });
+  storageMocks.importSnapshot.mockResolvedValue({ windows: [] });
+
+  createObjectURLSpy = vi.fn(() => 'blob:session');
+  revokeObjectURLSpy = vi.fn();
+
+  URL.createObjectURL = createObjectURLSpy;
+  URL.revokeObjectURL = revokeObjectURLSpy;
 
   pdfMocks.renderMock.mockImplementation(() => ({ promise: Promise.resolve() }));
-  pdfMocks.getPageMock.mockImplementation(async () => ({
-    getViewport: ({ scale, rotation = 0 }) => {
-      const normalizedRotation = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
-      const rotated = normalizedRotation === 90 || normalizedRotation === 270;
+  pdfMocks.getPageMock.mockImplementation(async (pageNumber) => {
+    const index = Number.isFinite(pageNumber) ? Math.max(1, Math.floor(pageNumber)) : 1;
 
-      return {
-        width: (rotated ? 800 : 600) * scale,
-        height: (rotated ? 600 : 800) * scale,
-      };
-    },
-    render: pdfMocks.renderMock,
-  }));
+    return {
+      getViewport: ({ scale, rotation = 0 }) => {
+        const normalizedRotation = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
+        const rotated = normalizedRotation === 90 || normalizedRotation === 270;
+
+        return {
+          width: (rotated ? 800 : 600) * scale,
+          height: (rotated ? 600 : 800) * scale,
+        };
+      },
+      render: pdfMocks.renderMock,
+      getTextContent: async () => ({
+        items: [
+          {
+            str: pdfMocks.state.textByPage.get(index) ?? '',
+          },
+        ],
+      }),
+    };
+  });
+  pdfMocks.getOutlineMock.mockImplementation(async () => pdfMocks.state.outline);
+  pdfMocks.getDestinationMock.mockImplementation(async (name) => {
+    return pdfMocks.state.namedDestinations[name] ?? null;
+  });
+  pdfMocks.getPageIndexMock.mockImplementation(async (ref) => {
+    const index = pdfMocks.state.pageIndex.get(ref);
+
+    if (!Number.isFinite(index)) {
+      throw new Error('Unknown reference');
+    }
+
+    return index;
+  });
   pdfMocks.getDocumentMock.mockImplementation(() => ({
     promise: Promise.resolve({
       numPages: pdfMocks.state.numPages,
       getPage: pdfMocks.getPageMock,
       destroy: pdfMocks.destroyMock,
+      getOutline: pdfMocks.getOutlineMock,
+      getDestination: pdfMocks.getDestinationMock,
+      getPageIndex: pdfMocks.getPageIndexMock,
     }),
   }));
 
@@ -131,6 +231,18 @@ beforeEach(() => {
 
 afterEach(() => {
   HTMLCanvasElement.prototype.getContext = originalGetContext;
+
+  if (typeof originalCreateObjectURL === 'function') {
+    URL.createObjectURL = originalCreateObjectURL;
+  } else {
+    delete URL.createObjectURL;
+  }
+
+  if (typeof originalRevokeObjectURL === 'function') {
+    URL.revokeObjectURL = originalRevokeObjectURL;
+  } else {
+    delete URL.revokeObjectURL;
+  }
 });
 
 describe('createWorkspace', () => {
@@ -143,7 +255,82 @@ describe('createWorkspace', () => {
     expect(workspace.querySelector('.workspace__drop-zone')).not.toBeNull();
     expect(workspace.querySelector('.workspace__button')?.textContent).toBe('PDFを開く');
     expect(workspace.querySelector('.workspace__file-input')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__onboarding')).not.toBeNull();
     expect(workspace.querySelector('.workspace__queue')).not.toBeNull();
+  });
+
+  it('shows onboarding guidance when no windows are open and restores it after closing the last window', async () => {
+    const workspace = createWorkspace();
+    const onboarding = workspace.querySelector('.workspace__onboarding');
+
+    expect(onboarding).toBeInstanceOf(HTMLElement);
+    expect(onboarding?.hidden).toBe(false);
+
+    const file = new File(['dummy'], 'guide.pdf', { type: 'application/pdf' });
+    await openWindow(workspace, file);
+
+    expect(onboarding?.hidden).toBe(true);
+
+    const closeButton = workspace.querySelector('.workspace__window-close');
+
+    if (!closeButton) {
+      throw new Error('close button is required for the onboarding test');
+    }
+
+    closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(onboarding?.hidden).toBe(false);
+  });
+
+  it('hides onboarding when the completion preference is stored', async () => {
+    storageMocks.loadPreferences.mockResolvedValueOnce({ onboardingCompleted: true });
+
+    const workspace = createWorkspace();
+    await flushPromises();
+
+    const onboarding = workspace.querySelector('.workspace__onboarding');
+
+    expect(storageMocks.loadPreferences).toHaveBeenCalledTimes(1);
+    expect(onboarding).toBeInstanceOf(HTMLElement);
+    expect(onboarding?.hidden).toBe(true);
+  });
+
+  it('opens the sample PDF from onboarding without requiring a manual file', async () => {
+    const workspace = createWorkspace();
+    const onboarding = workspace.querySelector('.workspace__onboarding');
+    const sampleButton = workspace.querySelector('.workspace__onboarding-button');
+
+    expect(onboarding).toBeInstanceOf(HTMLElement);
+    expect(sampleButton).toBeInstanceOf(HTMLElement);
+
+    sampleButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushPromises();
+    await flushPromises();
+    await flushPromises();
+
+    expect(pdfMocks.getDocumentMock).toHaveBeenCalled();
+    expect(workspace.querySelectorAll('.workspace__window').length).toBeGreaterThan(0);
+    expect(onboarding?.hidden).toBe(true);
+  });
+
+  it('persists the onboarding completion flag when the dismiss control is used', async () => {
+    const workspace = createWorkspace();
+    const dismissButton = workspace.querySelector('.workspace__onboarding-dismiss');
+
+    expect(dismissButton).toBeInstanceOf(HTMLElement);
+
+    dismissButton?.click();
+
+    await vi.waitFor(() => {
+      expect(storageMocks.persistPreference).toHaveBeenCalledWith('onboardingCompleted', true);
+    });
+
+    const onboarding = workspace.querySelector('.workspace__onboarding');
+    await vi.waitFor(() => {
+      expect(onboarding?.hidden).toBe(true);
+    });
   });
 
   it('adds and removes the active state on drag interactions', () => {
@@ -182,6 +369,99 @@ describe('createWorkspace', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0][0].detail.files).toEqual([file]);
+  });
+
+  it('performs keyword search and navigates between results', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'search.pdf', { type: 'application/pdf' });
+    await openWindow(workspace, file);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+
+    if (!windowElement) {
+      throw new Error('window element is required for the search test');
+    }
+
+    const searchEvents = vi.fn();
+    windowElement.addEventListener('workspace:window-search', searchEvents);
+
+    const searchInput = windowElement.querySelector('.workspace__window-search-input');
+    const searchForm = windowElement.querySelector('.workspace__window-search-form');
+
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+    expect(searchForm).toBeInstanceOf(HTMLFormElement);
+
+    if (!(searchInput instanceof HTMLInputElement) || !(searchForm instanceof HTMLFormElement)) {
+      throw new Error('search form elements are required');
+    }
+
+    searchInput.value = 'keyword';
+    searchForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+    await flushPromises();
+    await flushPromises();
+
+    const results = windowElement.querySelectorAll('.workspace__window-search-result');
+    expect(results.length).toBeGreaterThanOrEqual(2);
+    expect(windowElement.dataset.searchQuery).toBe('keyword');
+    expect(windowElement.dataset.searchCount).toBe(String(results.length));
+    expect(searchEvents).toHaveBeenCalled();
+
+    const viewer = windowElement.querySelector('.workspace__window-viewer');
+    expect(viewer?.dataset.page).toBe('1');
+
+    const nextButton = windowElement.querySelector('.workspace__window-search-next');
+    expect(nextButton).toBeInstanceOf(HTMLButtonElement);
+    nextButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushPromises();
+
+    expect(viewer?.dataset.page).toBe('2');
+
+    const firstResultButton = windowElement.querySelector(
+      '.workspace__window-search-result button',
+    );
+    expect(firstResultButton).toBeInstanceOf(HTMLButtonElement);
+    firstResultButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushPromises();
+
+    expect(viewer?.dataset.page).toBe('1');
+  });
+
+  it('renders outline entries and jumps to the selected section', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['outline'], 'outline.pdf', { type: 'application/pdf' });
+    await openWindow(workspace, file);
+
+    const windowElement = workspace.querySelector('.workspace__window');
+
+    if (!windowElement) {
+      throw new Error('window element is required for the outline test');
+    }
+
+    const outlineEvents = vi.fn();
+    windowElement.addEventListener('workspace:window-outline-jump', outlineEvents);
+
+    await flushPromises();
+    await flushPromises();
+
+    const outlineItems = windowElement.querySelectorAll('.workspace__window-outline-item');
+    expect(outlineItems.length).toBeGreaterThanOrEqual(2);
+    expect(windowElement.dataset.outlineCount).toBe(String(outlineItems.length));
+
+    const viewer = windowElement.querySelector('.workspace__window-viewer');
+    expect(viewer?.dataset.page).toBe('1');
+
+    const secondButton = outlineItems[1]?.querySelector('button');
+    expect(secondButton).toBeInstanceOf(HTMLButtonElement);
+    secondButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushPromises();
+
+    expect(outlineEvents).toHaveBeenCalled();
+    expect(viewer?.dataset.page).toBe('4');
+    expect(outlineEvents.mock.calls.at(-1)?.[0].detail.page).toBe(4);
   });
 
   it('restores persisted windows with their saved layout and focus', async () => {
@@ -2758,7 +3038,7 @@ describe('createWorkspace', () => {
       }),
     );
 
-    const button = workspace.querySelector('.workspace__maintenance-button');
+    const button = workspace.querySelector('.workspace__maintenance-button--clear');
 
     if (!button) {
       throw new Error('maintenance control is required');
@@ -2802,7 +3082,7 @@ describe('createWorkspace', () => {
     await openWindow(workspace, file);
     await flushPromises();
 
-    const button = workspace.querySelector('.workspace__maintenance-button');
+    const button = workspace.querySelector('.workspace__maintenance-button--clear');
 
     if (!button) {
       throw new Error('maintenance control is required');
@@ -2832,7 +3112,7 @@ describe('createWorkspace', () => {
 
     storageMocks.clear.mockRejectedValueOnce(new Error('failed to clear'));
 
-    const button = workspace.querySelector('.workspace__maintenance-button');
+    const button = workspace.querySelector('.workspace__maintenance-button--clear');
 
     if (!button) {
       throw new Error('maintenance control is required');
@@ -2860,5 +3140,188 @@ describe('createWorkspace', () => {
     expect(status.classList.contains('workspace__maintenance-status--error')).toBe(true);
 
     confirmSpy.mockRestore();
+  });
+
+  it('exports a session snapshot via the maintenance controls', async () => {
+    const workspace = createWorkspace();
+    const exportBlob = new Blob(['{"version":1}'], { type: 'application/json' });
+
+    storageMocks.exportSnapshot.mockResolvedValueOnce({
+      blob: exportBlob,
+      windows: 3,
+      compression: 'none',
+    });
+
+    const exportButton = workspace.querySelector('.workspace__maintenance-button--export');
+
+    if (!exportButton) {
+      throw new Error('maintenance export control is required');
+    }
+
+    const exportedHandler = vi.fn();
+    workspace.addEventListener('workspace:session-exported', exportedHandler);
+
+    exportButton.click();
+
+    await flushPromises();
+
+    expect(storageMocks.exportSnapshot).toHaveBeenCalledTimes(1);
+    expect(storageMocks.exportSnapshot).toHaveBeenCalledWith({
+      windowIds: null,
+      compression: 'gzip',
+    });
+    expect(createObjectURLSpy).toHaveBeenCalledWith(exportBlob);
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:session');
+
+    expect(exportedHandler).toHaveBeenCalledTimes(1);
+    const detail = exportedHandler.mock.calls[0][0].detail;
+    expect(detail.windows).toBe(3);
+    expect(detail.fileName).toMatch(/^gmworkbench-session-\d{8}-\d{6}\.json$/);
+
+    const status = workspace.querySelector('.workspace__maintenance-status');
+
+    if (!status) {
+      throw new Error('maintenance status element is required');
+    }
+
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toContain('セッションを書き出しました');
+    expect(status.classList.contains('workspace__maintenance-status--error')).toBe(false);
+  });
+
+  it('shows a warning message when scoped export has no targets', async () => {
+    const workspace = createWorkspace();
+    await flushPromises();
+
+    const scopeOpen = workspace.querySelector('input[value="open"]');
+    const exportButton = workspace.querySelector('.workspace__maintenance-button--export');
+
+    if (!(scopeOpen instanceof HTMLInputElement) || !exportButton) {
+      throw new Error('maintenance export controls are required');
+    }
+
+    scopeOpen.checked = true;
+    exportButton.click();
+
+    await flushPromises();
+
+    expect(storageMocks.exportSnapshot).not.toHaveBeenCalled();
+
+    const status = workspace.querySelector('.workspace__maintenance-status');
+
+    if (!status) {
+      throw new Error('maintenance status element is required');
+    }
+
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toBe('書き出すウィンドウがありません。');
+  });
+
+  it('imports a session snapshot and replaces open windows', async () => {
+    const workspace = createWorkspace();
+    const file = new File(['dummy'], 'existing.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, file);
+    await flushPromises();
+
+    const snapshotFile = new File(['{"version":1}'], 'session.json', {
+      type: 'application/json',
+    });
+    const restoredPdf = new File(['pdf'], 'restored.pdf', { type: 'application/pdf' });
+
+    storageMocks.importSnapshot.mockResolvedValueOnce({
+      windows: [
+        {
+          id: 'window-imported',
+          file: restoredPdf,
+          page: 2,
+          zoom: 1.2,
+          openedAt: 10,
+          lastFocusedAt: 20,
+        },
+      ],
+      exportedAt: '2025-10-12T00:00:00.000Z',
+    });
+
+    const importButton = workspace.querySelector('.workspace__maintenance-button--import');
+    const fileInput = workspace.querySelector('.workspace__maintenance-file');
+
+    if (!importButton || !(fileInput instanceof HTMLInputElement)) {
+      throw new Error('maintenance import control is required');
+    }
+
+    const importedHandler = vi.fn();
+    workspace.addEventListener('workspace:session-imported', importedHandler);
+
+    Object.defineProperty(fileInput, 'files', {
+      configurable: true,
+      value: [snapshotFile],
+    });
+
+    fileInput.dispatchEvent(new Event('change'));
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(storageMocks.importSnapshot).toHaveBeenCalledTimes(1);
+    expect(storageMocks.importSnapshot).toHaveBeenCalledWith(snapshotFile);
+    expect(storageMocks.clear).toHaveBeenCalledTimes(1);
+
+    const windows = workspace.querySelectorAll('.workspace__window');
+    expect(windows).toHaveLength(1);
+    expect(windows[0]?.dataset.windowId).toBe('window-imported');
+
+    expect(importedHandler).toHaveBeenCalledTimes(1);
+    const importDetail = importedHandler.mock.calls[0][0].detail;
+    expect(importDetail.windows).toBe(1);
+    expect(importDetail.previous).toBe(1);
+    expect(importDetail.exportedAt).toBe('2025-10-12T00:00:00.000Z');
+
+    const status = workspace.querySelector('.workspace__maintenance-status');
+
+    if (!status) {
+      throw new Error('maintenance status element is required');
+    }
+
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toContain('セッションを読み込みました');
+    expect(status.classList.contains('workspace__maintenance-status--error')).toBe(false);
+  });
+
+  it('shows an error message when the session import fails', async () => {
+    const workspace = createWorkspace();
+    const snapshotFile = new File(['broken'], 'broken.json', { type: 'application/json' });
+
+    storageMocks.importSnapshot.mockRejectedValueOnce(new Error('invalid snapshot'));
+
+    const fileInput = workspace.querySelector('.workspace__maintenance-file');
+
+    if (!(fileInput instanceof HTMLInputElement)) {
+      throw new Error('maintenance import input is required');
+    }
+
+    Object.defineProperty(fileInput, 'files', {
+      configurable: true,
+      value: [snapshotFile],
+    });
+
+    fileInput.dispatchEvent(new Event('change'));
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(storageMocks.importSnapshot).toHaveBeenCalledTimes(1);
+    expect(storageMocks.importSnapshot).toHaveBeenCalledWith(snapshotFile);
+    expect(storageMocks.clear).not.toHaveBeenCalled();
+
+    const status = workspace.querySelector('.workspace__maintenance-status');
+
+    if (!status) {
+      throw new Error('maintenance status element is required');
+    }
+
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toContain('読み込みに失敗しました');
+    expect(status.classList.contains('workspace__maintenance-status--error')).toBe(true);
   });
 });

@@ -9,12 +9,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "docs:print:changelog": "node scripts/docs/print-md-list.mjs docs/changelog",
-    "docs:print:decisions": "node scripts/docs/print-md-list.mjs docs/decisions"
+    "docs:print:decisions": "node scripts/docs/print-md-list.mjs docs/decisions",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "pdfjs-dist": "^5.4.296"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.0",
     "jsdom": "^25.0.1",
     "vite": "^5.4.8",
     "vitest": "^1.6.0"

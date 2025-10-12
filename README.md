@@ -24,7 +24,13 @@ pnpm test
 
 # ウォッチしながら開発する場合
 pnpm vitest -- --watch
+
+# Playwright E2E テスト
+pnpm build
+pnpm test:e2e
 ```
+
+初回実行時は `npx playwright install chromium` でブラウザバイナリを取得してください。Linux 環境で必要なシステムライブラリが不足している場合は `npx playwright install-deps` を追加で実行してください。`pnpm test:e2e` はビルド済みの `dist/` を対象に `pnpm preview` を起動し、GitHub Pages と同じ静的配信環境で検証します。
 
 ## デプロイ
 
@@ -70,7 +76,26 @@ pnpm docs:print:decisions
 - `workspace:window-color-change` — ウィンドウの色タグを切り替えたとき。`detail.color` に現在の色 ID を含む。
 - `workspace:window-bookmarks-change` — ブックマークを追加・削除したとき。`detail.action` (`add` / `remove`)、`page`、`bookmarks` 配列を通知します。
 - `workspace:window-bookmark-jump` — ブックマーク一覧やショートカットでページへ移動したとき。`detail.page`、`source`、`bookmarks`、次・前のブックマーク番号 (`next` / `previous`) を含みます。
+- `workspace:session-exported` — メンテナンスパネルからセッションを書き出したとき。`detail.windows`（書き出したウィンドウ件数）と `fileName` を通知します。
+- `workspace:session-imported` — セッションを読み込んだとき。`detail.windows`（開いたウィンドウ件数）、`previous`（読み込み前に閉じたウィンドウ件数）、`exportedAt`（スナップショットが持つタイムスタンプ、存在する場合）を含みます。
 - `workspace:cache-cleared` — メンテナンス操作で保存済みデータを削除したとき。`detail.windowsCleared` に閉じたウィンドウ件数が入ります。
+- `workspace:window-search` — PDF 内検索を実行したとき。`detail.query`、`totalResults`、`index`、現在ページ (`page`)、`action` (`search` / `navigate` / `previous` / `next` / `result`) を通知します。
+- `workspace:window-outline-jump` — アウトライン項目からページへ移動したとき。`detail.page`、`title`、`index`、`level` を含みます。
+
+## 初回オンボーディング
+
+- ワークスペースに PDF ウィンドウが 1 件もない場合、ドラッグ＆ドロップから整理までの 4 ステップを示したガイドカードを表示します。
+- ガイドには「サンプルPDFを開いてみる」ボタンが付属し、検索語とアウトライン見出しを含む 4 ページ構成の PDF で操作感を確かめられます。
+- ガイド右下の「ガイドを閉じる」ボタンから完了フラグを保存でき、常連ユーザーは空の状態でもガイドを非表示のまま利用できます。
+- 最初のウィンドウを開くとガイドは自動で退避し、完了フラグが無効な場合のみすべてのウィンドウを閉じると再び表示されるため、空の状態に迷うことがありません。
+
+## PDF内検索とアウトライン
+
+- ウィンドウツールバー下に検索フォームを追加し、キーワードを入力して Enter または「検索」ボタンを押すと全ページから一致箇所を収集します。
+- 検索結果は最大 200 件までリスト表示され、「前へ」「次へ」ボタンまたは各結果をクリックしてページへジャンプできます。`Ctrl + F` (macOS は `⌘F`) でフォームへフォーカスできます。
+- 検索状態は `data-search-query`、`data-search-count`、`data-search-index` に反映され、`workspace:window-search` イベントで外部へ通知されます。
+- pdf.js のアウトライン情報を読み込み、章構成をリスト表示します。各項目をクリックすると該当ページへ移動し、`workspace:window-outline-jump` で遷移内容を通知します。
+- アウトラインが存在しない場合は「アウトライン情報は見つかりませんでした。」と表示し、読み込み失敗時はステータスメッセージでエラーを知らせます。
 
 ## PDFビューア統合
 
@@ -85,7 +110,9 @@ pnpm docs:print:decisions
 - IndexedDB にウィンドウ配置・ページ・ズーム・回転・ピン状態を保存し、ブラウザを再読み込みしても直近の PDF 状態を復元します。
 - 最大化状態と復元用レイアウト (`restoreLeft`/`restoreTop`/`restoreWidth`/`restoreHeight`) も保存し、再訪時に同じ広がり方を再現します。
 - PDF ファイル本体はローカルのみで保持され、`File`/`Blob` を直接 IndexedDB に退避します。ネットワークへ送信されることはありません。
-- ブラウザの「サイトデータを削除」を実行すると保存されたセッションが初期化されます。UI 上でも「キャッシュを全削除」ボタンから保存済み PDF とウィンドウ配置を一括でリセットでき、処理完了時には `workspace:cache-cleared` を発火します。
+- ブラウザの「サイトデータを削除」を実行すると保存されたセッションが初期化されます。UI 上でもメンテナンスパネルの「キャッシュを全削除」ボタンから保存済み PDF とウィンドウ配置を一括でリセットでき、処理完了時には `workspace:cache-cleared` を発火します。
+- 同じメンテナンスパネルからセッションの JSON スナップショットを書き出し・読み込みでき、外部ストレージへバックアップしたり別ブラウザへ持ち込む運用をサポートします。書き出し後は `workspace:session-exported`、読み込み後は `workspace:session-imported` を通知します。
+- 書き出し時は「保存済みすべて」「開いているウィンドウのみ」の対象選択と、gzip 圧縮（対応ブラウザのみ）の有無を切り替えられます。ウィンドウが存在しない場合は警告メッセージで知らせます。
 - メモ欄もレイアウトやページ情報と同じく永続化され、再読み込み後に内容が復元されます。
 
 ## ウィンドウ複製

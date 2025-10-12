@@ -1,14 +1,75 @@
 const DATABASE_NAME = 'gmworkbench';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const STORE_NAME = 'workspace-windows';
+const SETTINGS_STORE_NAME = 'workspace-settings';
 const MAX_STORED_HISTORY = 50;
 const MAX_STORED_BOOKMARKS = 50;
 const ROTATION_STEP = 90;
+const SNAPSHOT_VERSION = 1;
+const SNAPSHOT_MIME = 'application/json';
+const SNAPSHOT_COMPRESSED_MIME = 'application/gzip';
 
 const memoryStore = new Map();
+const settingsMemoryStore = new Map();
 let databasePromise = null;
 
 const hasIndexedDB = () => typeof indexedDB !== 'undefined';
+
+function encodeBase64(buffer) {
+  if (!(buffer instanceof ArrayBuffer) && !ArrayBuffer.isView(buffer)) {
+    throw new TypeError('An ArrayBuffer is required for base64 encoding.');
+  }
+
+  if (typeof Buffer === 'function') {
+    if (buffer instanceof ArrayBuffer) {
+      return Buffer.from(buffer).toString('base64');
+    }
+
+    const view = buffer;
+    return Buffer.from(view.buffer, view.byteOffset, view.byteLength).toString('base64');
+  }
+
+  const view = buffer instanceof ArrayBuffer
+    ? new Uint8Array(buffer)
+    : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+  const bytes = view;
+  let binary = '';
+
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+
+  if (typeof btoa === 'function') {
+    return btoa(binary);
+  }
+
+  throw new Error('Base64 encoding is not supported in this environment.');
+}
+
+function decodeBase64(base64) {
+  if (typeof base64 !== 'string' || base64.length === 0) {
+    throw new TypeError('A base64 encoded string is required.');
+  }
+
+  if (typeof Buffer === 'function') {
+    return Buffer.from(base64, 'base64');
+  }
+
+  if (typeof atob === 'function') {
+    const binary = atob(base64);
+    const length = binary.length;
+    const bytes = new Uint8Array(length);
+
+    for (let index = 0; index < length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    return bytes;
+  }
+
+  throw new Error('Base64 decoding is not supported in this environment.');
+}
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -19,6 +80,10 @@ function openDatabase() {
 
       if (!database.objectStoreNames.contains(STORE_NAME)) {
         database.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+
+      if (!database.objectStoreNames.contains(SETTINGS_STORE_NAME)) {
+        database.createObjectStore(SETTINGS_STORE_NAME, { keyPath: 'key' });
       }
     };
 
@@ -45,6 +110,128 @@ async function getDatabase() {
   }
 
   return databasePromise;
+}
+
+async function getAllStoredRecords() {
+  if (!hasIndexedDB()) {
+    return Array.from(memoryStore.values()).map((record) => ({ ...record }));
+  }
+
+  const database = await getDatabase();
+
+  if (!database) {
+    return [];
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const records = Array.isArray(request.result) ? request.result : [];
+      resolve(records.map((record) => ({ ...record })));
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to read stored workspace windows.'));
+    };
+  });
+}
+
+async function getAllPreferences() {
+  if (!hasIndexedDB()) {
+    return Array.from(settingsMemoryStore.entries()).map(([key, value]) => ({ key, value }));
+  }
+
+  const database = await getDatabase();
+
+  if (!database) {
+    return [];
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(SETTINGS_STORE_NAME, 'readonly');
+    const store = transaction.objectStore(SETTINGS_STORE_NAME);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const records = Array.isArray(request.result) ? request.result : [];
+      resolve(records.map((record) => ({ ...record })));
+    };
+
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to read workspace preferences.'));
+    };
+  });
+}
+
+async function persistPreference(key, value) {
+  if (typeof key !== 'string' || key.length === 0) {
+    throw new TypeError('A preference key is required for persistence.');
+  }
+
+  if (!hasIndexedDB()) {
+    if (value === undefined) {
+      settingsMemoryStore.delete(key);
+    } else {
+      settingsMemoryStore.set(key, value);
+    }
+    return;
+  }
+
+  const database = await getDatabase();
+
+  if (!database) {
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(SETTINGS_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(SETTINGS_STORE_NAME);
+
+    if (value === undefined) {
+      const deleteRequest = store.delete(key);
+
+      deleteRequest.onsuccess = () => resolve();
+      deleteRequest.onerror = () => {
+        reject(deleteRequest.error || new Error('Failed to remove workspace preference.'));
+      };
+      return;
+    }
+
+    const request = store.put({ key, value });
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to persist workspace preference.'));
+    };
+  });
+}
+
+async function clearPreferences() {
+  settingsMemoryStore.clear();
+
+  if (!hasIndexedDB()) {
+    return;
+  }
+
+  const database = await getDatabase();
+
+  if (!database) {
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(SETTINGS_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(SETTINGS_STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => {
+      reject(request.error || new Error('Failed to clear workspace preferences.'));
+    };
+  });
 }
 
 function toBlob(file) {
@@ -385,6 +572,21 @@ export async function loadWorkspaceWindows() {
   });
 }
 
+export async function loadWorkspacePreferences() {
+  const entries = await getAllPreferences();
+  const preferences = {};
+
+  entries.forEach((entry) => {
+    if (!entry || typeof entry.key !== 'string') {
+      return;
+    }
+
+    preferences[entry.key] = entry.value;
+  });
+
+  return preferences;
+}
+
 export async function persistWorkspaceWindow(state, options = {}) {
   if (!state || !state.id) {
     throw new TypeError('A workspace window id is required for persistence.');
@@ -473,6 +675,7 @@ export async function removeWorkspaceWindow(id) {
 
 export async function clearWorkspaceWindows() {
   memoryStore.clear();
+  await clearPreferences();
 
   if (!hasIndexedDB()) {
     return;
@@ -501,4 +704,277 @@ export async function clearWorkspaceWindows() {
 
 export function __clearMemoryStore() {
   memoryStore.clear();
+  settingsMemoryStore.clear();
+}
+
+export async function persistWorkspacePreference(key, value) {
+  await persistPreference(key, value);
+}
+
+export async function clearWorkspacePreferences() {
+  await clearPreferences();
+}
+
+async function compressSnapshot(json, compression) {
+  if (typeof json !== 'string' || json.length === 0) {
+    return null;
+  }
+
+  if (compression !== 'gzip') {
+    return null;
+  }
+
+  if (typeof CompressionStream !== 'function') {
+    return null;
+  }
+
+  try {
+    const encoder = new TextEncoder();
+    const stream = new CompressionStream('gzip');
+    const writer = stream.writable.getWriter();
+    await writer.write(encoder.encode(json));
+    await writer.close();
+    const response = new Response(stream.readable);
+    return await response.blob();
+  } catch (error) {
+    return null;
+  }
+}
+
+async function decompressSnapshot(blob) {
+  if (!(blob instanceof Blob)) {
+    return null;
+  }
+
+  if (typeof DecompressionStream !== 'function') {
+    throw new Error('この環境では圧縮されたスナップショットを展開できません。');
+  }
+
+  const sourceStream = typeof blob.stream === 'function'
+    ? blob.stream()
+    : new Response(blob).body;
+
+  if (!sourceStream) {
+    throw new Error('スナップショットのストリームを読み取れませんでした。');
+  }
+
+  const decompressor = new DecompressionStream('gzip');
+  const decompressed = sourceStream.pipeThrough(decompressor);
+  const response = new Response(decompressed);
+  return response.text();
+}
+
+export async function exportWorkspaceSnapshot(options = {}) {
+  const records = await getAllStoredRecords();
+
+  const windowIds = Array.isArray(options.windowIds)
+    ? options.windowIds
+        .map((id) => (typeof id === 'string' && id.length > 0 ? id : null))
+        .filter(Boolean)
+    : null;
+  const idSet = windowIds ? new Set(windowIds) : null;
+  const compression = options.compression === 'gzip' ? 'gzip' : 'none';
+
+  const serializedWindows = [];
+
+  for (const record of records) {
+    if (idSet && !idSet.has(record.id)) {
+      continue;
+    }
+
+    if (!record || !record.id) {
+      continue;
+    }
+
+    const file = createStoredFile(record);
+
+    if (!file) {
+      throw new Error('Cannot export session: stored PDF data is missing.');
+    }
+
+    let arrayBuffer;
+
+    if (typeof file.arrayBuffer === 'function') {
+      arrayBuffer = await file.arrayBuffer();
+    } else if (typeof Response === 'function') {
+      try {
+        arrayBuffer = await new Response(file).arrayBuffer();
+      } catch (error) {
+        throw new Error('Cannot export session: stored PDF data is missing.');
+      }
+    } else {
+      throw new Error('Cannot export session: stored PDF data is missing.');
+    }
+    const base64 = encodeBase64(arrayBuffer);
+
+    const { data, ...rest } = record;
+
+    serializedWindows.push({
+      ...rest,
+      data: {
+        base64,
+        name: record.name || 'document.pdf',
+        type: record.type || 'application/pdf',
+        lastModified: Number.isFinite(record.lastModified) ? record.lastModified : undefined,
+      },
+    });
+  }
+
+  const payload = {
+    version: SNAPSHOT_VERSION,
+    exportedAt: new Date().toISOString(),
+    windows: serializedWindows,
+  };
+
+  const json = JSON.stringify(payload);
+  let blob = null;
+  let appliedCompression = 'none';
+
+  if (compression === 'gzip') {
+    const compressed = await compressSnapshot(json, compression);
+
+    if (compressed instanceof Blob && compressed.size > 0) {
+      const type = compressed.type && compressed.type.length > 0
+        ? compressed.type
+        : SNAPSHOT_COMPRESSED_MIME;
+      blob = new Blob([compressed], { type });
+      appliedCompression = 'gzip';
+    }
+  }
+
+  if (!blob) {
+    blob = new Blob([json], { type: SNAPSHOT_MIME });
+  }
+
+  return {
+    blob,
+    windows: serializedWindows.length,
+    payload,
+    compression: appliedCompression,
+  };
+}
+
+export async function importWorkspaceSnapshot(file) {
+  if (!file) {
+    throw new TypeError('A snapshot file is required for import.');
+  }
+
+  const snapshotText = await readSnapshotText(file);
+
+  let parsed;
+
+  try {
+    parsed = JSON.parse(snapshotText);
+  } catch (error) {
+    throw new Error('Provided snapshot is not valid JSON.');
+  }
+
+  if (!parsed || parsed.version !== SNAPSHOT_VERSION || !Array.isArray(parsed.windows)) {
+    throw new Error('Provided snapshot is not compatible with this version of GMWorkbench.');
+  }
+
+  const restoredWindows = [];
+
+  for (const entry of parsed.windows) {
+    if (!entry || typeof entry !== 'object' || !entry.id) {
+      continue;
+    }
+
+    const dataDescriptor = entry.data;
+
+    if (!dataDescriptor || typeof dataDescriptor.base64 !== 'string') {
+      throw new Error('Snapshot is missing PDF data for at least one window.');
+    }
+
+    let binary;
+
+    try {
+      binary = decodeBase64(dataDescriptor.base64);
+    } catch (error) {
+      throw new Error('Snapshot PDF data could not be decoded.');
+    }
+
+    const blob = new Blob([binary], {
+      type: dataDescriptor.type || entry.type || 'application/pdf',
+    });
+
+    const normalizedRecord = normalizeForStorage({
+      ...entry,
+      data: blob,
+      name: dataDescriptor.name || entry.name,
+      type: dataDescriptor.type || entry.type,
+      lastModified: Number.isFinite(dataDescriptor.lastModified)
+        ? dataDescriptor.lastModified
+        : entry.lastModified,
+    });
+
+    const restored = normalizeFromStorage(normalizedRecord);
+
+    if (restored) {
+      restoredWindows.push(restored);
+    }
+  }
+
+  return {
+    windows: restoredWindows,
+    exportedAt: typeof parsed.exportedAt === 'string' ? parsed.exportedAt : undefined,
+    version: parsed.version,
+  };
+}
+
+async function readSnapshotText(blob) {
+  if (!blob) {
+    throw new TypeError('Snapshot file is not readable.');
+  }
+
+  if (blob instanceof Blob) {
+    const type = typeof blob.type === 'string' ? blob.type.toLowerCase() : '';
+
+    if (type === SNAPSHOT_COMPRESSED_MIME || blob.name?.toLowerCase?.().endsWith('.gz')) {
+      const text = await decompressSnapshot(blob);
+
+      if (typeof text === 'string') {
+        return text;
+      }
+    }
+  }
+
+  if (typeof blob.text === 'function') {
+    return blob.text();
+  }
+
+  if (typeof Response === 'function') {
+    try {
+      return await new Response(blob).text();
+    } catch (error) {
+      // fall through to other strategies
+    }
+  }
+
+  if (typeof blob.arrayBuffer === 'function') {
+    const buffer = await blob.arrayBuffer();
+
+    if (typeof TextDecoder === 'function') {
+      return new TextDecoder().decode(buffer);
+    }
+
+    const view = buffer instanceof ArrayBuffer
+      ? new Uint8Array(buffer)
+      : ArrayBuffer.isView(buffer)
+        ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+        : new Uint8Array(buffer);
+
+    let text = '';
+    for (let index = 0; index < view.length; index += 1) {
+      text += String.fromCharCode(view[index]);
+    }
+
+    return text;
+  }
+
+  if (typeof Buffer === 'function' && typeof Buffer.isBuffer === 'function' && Buffer.isBuffer(blob)) {
+    return blob.toString('utf-8');
+  }
+
+  throw new TypeError('Snapshot file cannot be read as text.');
 }

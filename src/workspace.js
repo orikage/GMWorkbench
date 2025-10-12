@@ -4,7 +4,12 @@ import {
   persistWorkspaceWindow,
   removeWorkspaceWindow,
   clearWorkspaceWindows,
+  loadWorkspacePreferences,
+  persistWorkspacePreference,
+  exportWorkspaceSnapshot,
+  importWorkspaceSnapshot,
 } from './workspace-storage.js';
+import { createSamplePdfFile } from './sample-pdf.js';
 
 const TITLE = 'GMWorkbench';
 const TAGLINE = 'PDFシナリオの仮想デスク';
@@ -32,12 +37,17 @@ const WINDOW_MAXIMIZE_CHANGE_EVENT = 'workspace:window-maximize-change';
 const WINDOW_FOCUS_CYCLE_EVENT = 'workspace:window-focus-cycle';
 const WINDOW_BOOKMARKS_CHANGE_EVENT = 'workspace:window-bookmarks-change';
 const WINDOW_BOOKMARK_JUMP_EVENT = 'workspace:window-bookmark-jump';
+const WINDOW_SEARCH_EVENT = 'workspace:window-search';
+const WINDOW_OUTLINE_JUMP_EVENT = 'workspace:window-outline-jump';
 const DEFAULT_WINDOW_ZOOM = 1;
 const MIN_WINDOW_ZOOM = 0.5;
 const MAX_WINDOW_ZOOM = 2;
 const WINDOW_ZOOM_STEP = 0.1;
 const PAGE_HISTORY_LIMIT = 50;
 const WORKSPACE_CACHE_CLEARED_EVENT = 'workspace:cache-cleared';
+const WORKSPACE_SESSION_EXPORTED_EVENT = 'workspace:session-exported';
+const WORKSPACE_SESSION_IMPORTED_EVENT = 'workspace:session-imported';
+const PREF_ONBOARDING_COMPLETED = 'onboardingCompleted';
 const DEFAULT_WINDOW_ROTATION = 0;
 const ROTATION_STEP = 90;
 const MAX_WINDOW_BOOKMARKS = 50;
@@ -49,6 +59,19 @@ const WINDOW_COLORS = [
   { id: 'indigo', label: '藍' },
 ];
 const DEFAULT_WINDOW_COLOR = WINDOW_COLORS[0].id;
+
+const padNumber = (value) => String(value).padStart(2, '0');
+
+const formatSnapshotTimestamp = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = padNumber(date.getMonth() + 1);
+  const day = padNumber(date.getDate());
+  const hours = padNumber(date.getHours());
+  const minutes = padNumber(date.getMinutes());
+  const seconds = padNumber(date.getSeconds());
+
+  return `${year}${month}${day}-${hours}${minutes}${seconds}`;
+};
 
 function createHeader() {
   const header = document.createElement('header');
@@ -279,7 +302,155 @@ function createHint() {
   return hint;
 }
 
-function createMaintenancePanel({ onClear } = {}) {
+function createOnboarding({ onRequestSample, onDismiss } = {}) {
+  const section = document.createElement('section');
+  section.className = 'workspace__onboarding';
+
+  const title = document.createElement('h2');
+  title.className = 'workspace__onboarding-title';
+  title.textContent = 'はじめての使い方';
+
+  const description = document.createElement('p');
+  description.className = 'workspace__onboarding-description';
+  description.textContent =
+    'PDF をまだ開いていない場合は、下のステップとサンプルPDFで主要な流れを体験できます。検索語やアウトラインの例も用意しています。';
+
+  const steps = document.createElement('ol');
+  steps.className = 'workspace__onboarding-steps';
+
+  const stepItems = [
+    {
+      title: 'サンプルPDFで機能を確認',
+      body: '下のボタンから開くサンプルには検索語とアウトラインが登録されています。検索バーやアウトラインパネルで挙動を確かめてください。',
+    },
+    {
+      title: 'PDF を取り込む',
+      body: 'ドロップゾーンにドラッグ＆ドロップするか、「PDFを開く」ボタンからファイルを選択します。',
+    },
+    {
+      title: '取り込みキューで並べ替える',
+      body: '取り込んだファイルはキューに入り、任意のタイミングでワークスペースへ配置できます。',
+    },
+    {
+      title: 'ワークスペースで整理する',
+      body: 'ウィンドウを移動・拡大しながらページ移動やメモでシナリオを整理します。',
+    },
+  ];
+
+  stepItems.forEach(({ title: stepTitle, body }) => {
+    const item = document.createElement('li');
+    item.className = 'workspace__onboarding-step';
+
+    const itemTitle = document.createElement('h3');
+    itemTitle.className = 'workspace__onboarding-step-title';
+    itemTitle.textContent = stepTitle;
+
+    const itemBody = document.createElement('p');
+    itemBody.className = 'workspace__onboarding-step-body';
+    itemBody.textContent = body;
+
+    item.append(itemTitle, itemBody);
+    steps.append(item);
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'workspace__onboarding-actions';
+
+  const sampleButton = document.createElement('button');
+  sampleButton.type = 'button';
+  sampleButton.className = 'workspace__onboarding-button';
+  sampleButton.textContent = 'サンプルPDFを開いてみる';
+
+  const dismissButton = document.createElement('button');
+  dismissButton.type = 'button';
+  dismissButton.className = 'workspace__onboarding-dismiss';
+  dismissButton.textContent = 'ガイドを閉じる（次回から表示しない）';
+
+  const status = document.createElement('p');
+  status.className = 'workspace__onboarding-status';
+  status.setAttribute('role', 'status');
+  status.hidden = true;
+
+  const resetStatus = () => {
+    status.hidden = true;
+    status.textContent = '';
+    status.classList.remove('workspace__onboarding-status--error');
+  };
+
+  let loading = false;
+  let dismissing = false;
+
+  sampleButton.addEventListener('click', async () => {
+    if (loading) {
+      return;
+    }
+
+    loading = true;
+    sampleButton.disabled = true;
+    status.hidden = false;
+    status.textContent = 'サンプルPDFを読み込み中…';
+    status.classList.remove('workspace__onboarding-status--error');
+
+    try {
+      await onRequestSample?.();
+      resetStatus();
+    } catch (error) {
+      status.hidden = false;
+      status.textContent = 'サンプルの読み込みに失敗しました。もう一度お試しください。';
+      status.classList.add('workspace__onboarding-status--error');
+    } finally {
+      loading = false;
+      sampleButton.disabled = false;
+    }
+  });
+
+  dismissButton.addEventListener('click', async () => {
+    if (dismissing) {
+      return;
+    }
+
+    dismissing = true;
+    dismissButton.disabled = true;
+    resetStatus();
+    status.hidden = false;
+    status.textContent = 'ガイド設定を更新しています…';
+
+    try {
+      await onDismiss?.();
+      status.hidden = false;
+      status.textContent = '次回以降、ガイドは表示されません。';
+    } catch (error) {
+      status.hidden = false;
+      status.textContent = 'ガイド設定の更新に失敗しました。もう一度お試しください。';
+      status.classList.add('workspace__onboarding-status--error');
+    } finally {
+      dismissing = false;
+      dismissButton.disabled = false;
+    }
+  });
+
+  actions.append(sampleButton, dismissButton, status);
+
+  section.append(title, description, steps, actions);
+
+  const setActive = (active) => {
+    section.hidden = !active;
+
+    if (!active) {
+      resetStatus();
+    }
+  };
+
+  setActive(true);
+
+  return {
+    element: section,
+    setActive,
+    resetStatus,
+  };
+}
+
+function createMaintenancePanel({ onClear, onExport, onImport } = {}) {
   const section = document.createElement('section');
   section.className = 'workspace__maintenance';
 
@@ -289,12 +460,70 @@ function createMaintenancePanel({ onClear } = {}) {
 
   const description = document.createElement('p');
   description.className = 'workspace__maintenance-description';
-  description.textContent = 'ブラウザに保存されたPDFとウィンドウ配置を全て削除します。';
+  description.textContent = 'ブラウザに保存されたPDFとウィンドウ配置の削除・書き出し・読み込みを行います。';
 
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'workspace__maintenance-button';
-  button.textContent = 'キャッシュを全削除';
+  const actions = document.createElement('div');
+  actions.className = 'workspace__maintenance-actions';
+
+  const options = document.createElement('fieldset');
+  options.className = 'workspace__maintenance-options';
+
+  const optionsLegend = document.createElement('legend');
+  optionsLegend.className = 'workspace__maintenance-options-title';
+  optionsLegend.textContent = '書き出しオプション';
+
+  const scopeAllLabel = document.createElement('label');
+  scopeAllLabel.className = 'workspace__maintenance-option';
+  const scopeAllInput = document.createElement('input');
+  scopeAllInput.type = 'radio';
+  scopeAllInput.name = 'workspace-export-scope';
+  scopeAllInput.value = 'all';
+  scopeAllInput.checked = true;
+  scopeAllLabel.append(scopeAllInput, document.createTextNode('保存済みすべて'));
+
+  const scopeOpenLabel = document.createElement('label');
+  scopeOpenLabel.className = 'workspace__maintenance-option';
+  const scopeOpenInput = document.createElement('input');
+  scopeOpenInput.type = 'radio';
+  scopeOpenInput.name = 'workspace-export-scope';
+  scopeOpenInput.value = 'open';
+  scopeOpenLabel.append(scopeOpenInput, document.createTextNode('開いているウィンドウのみ'));
+
+  const compressionLabel = document.createElement('label');
+  compressionLabel.className = 'workspace__maintenance-option workspace__maintenance-option--checkbox';
+  const compressionToggle = document.createElement('input');
+  compressionToggle.type = 'checkbox';
+  compressionToggle.name = 'workspace-export-compression';
+  compressionToggle.value = 'gzip';
+  compressionToggle.checked = true;
+  compressionLabel.append(
+    compressionToggle,
+    document.createTextNode('gzip 形式で圧縮する（対応環境のみ）'),
+  );
+
+  options.append(optionsLegend, scopeAllLabel, scopeOpenLabel, compressionLabel);
+  const exportScopeInputs = [scopeAllInput, scopeOpenInput];
+
+  const clearButton = document.createElement('button');
+  clearButton.type = 'button';
+  clearButton.className = 'workspace__maintenance-button workspace__maintenance-button--clear';
+  clearButton.textContent = 'キャッシュを全削除';
+
+  const exportButton = document.createElement('button');
+  exportButton.type = 'button';
+  exportButton.className = 'workspace__maintenance-button workspace__maintenance-button--export';
+  exportButton.textContent = 'セッションを書き出す';
+
+  const importButton = document.createElement('button');
+  importButton.type = 'button';
+  importButton.className = 'workspace__maintenance-button workspace__maintenance-button--import';
+  importButton.textContent = 'セッションを読み込む';
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'application/json';
+  fileInput.className = 'workspace__maintenance-file';
+  fileInput.setAttribute('aria-hidden', 'true');
 
   const status = document.createElement('p');
   status.className = 'workspace__maintenance-status';
@@ -318,14 +547,70 @@ function createMaintenancePanel({ onClear } = {}) {
     }
   };
 
-  let clearing = false;
+  const setDisabled = (disabled) => {
+    clearButton.disabled = disabled;
+    exportButton.disabled = disabled;
+    importButton.disabled = disabled;
+    fileInput.disabled = disabled;
+    exportScopeInputs.forEach((input) => {
+      input.disabled = disabled;
+    });
+    compressionToggle.disabled = disabled;
+  };
 
-  button.addEventListener('click', async () => {
-    if (clearing) {
+  let busy = false;
+
+  const runAction = async ({
+    button,
+    pendingText,
+    action,
+    getSuccessMessage,
+    getErrorMessage,
+  }) => {
+    if (busy) {
       return;
     }
 
+    if (typeof action !== 'function') {
+      showStatus('この操作は現在利用できません。', { isError: true });
+      return;
+    }
+
+    busy = true;
+    const originalText = button.textContent;
     resetStatus();
+    setDisabled(true);
+    button.textContent = pendingText;
+
+    try {
+      const result = await action();
+      const message = typeof getSuccessMessage === 'function'
+        ? getSuccessMessage(result)
+        : getSuccessMessage;
+
+      if (typeof message === 'string' && message.length > 0) {
+        showStatus(message);
+      } else {
+        resetStatus();
+      }
+    } catch (error) {
+      const message = typeof getErrorMessage === 'function'
+        ? getErrorMessage(error)
+        : getErrorMessage;
+      showStatus(message || '操作に失敗しました。もう一度お試しください。', {
+        isError: true,
+      });
+    } finally {
+      busy = false;
+      setDisabled(false);
+      button.textContent = originalText;
+    }
+  };
+
+  clearButton.addEventListener('click', async () => {
+    if (busy) {
+      return;
+    }
 
     if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
       const confirmed = window.confirm('保存済みのPDFとレイアウトをすべて削除しますか？');
@@ -335,29 +620,86 @@ function createMaintenancePanel({ onClear } = {}) {
       }
     }
 
-    clearing = true;
-    button.disabled = true;
-    button.textContent = '削除中…';
+    await runAction({
+      button: clearButton,
+      pendingText: '削除中…',
+      action: () => onClear?.(),
+      getSuccessMessage: (result = {}) => {
+        if (typeof result.message === 'string' && result.message.length > 0) {
+          return result.message;
+        }
 
-    try {
-      const result = (await onClear?.()) || {};
-      const windowsCleared = Number.isFinite(result.windowsCleared)
-        ? result.windowsCleared
-        : 0;
-      const summary = windowsCleared > 0
-        ? `保存データを削除しました（ウィンドウ${windowsCleared}件）。`
-        : '保存データを削除しました。';
-      showStatus(summary);
-    } catch (error) {
-      showStatus('削除に失敗しました。もう一度お試しください。', { isError: true });
-    } finally {
-      clearing = false;
-      button.disabled = false;
-      button.textContent = 'キャッシュを全削除';
-    }
+        const windowsCleared = Number.isFinite(result.windowsCleared)
+          ? result.windowsCleared
+          : 0;
+
+        return windowsCleared > 0
+          ? `保存データを削除しました（ウィンドウ${windowsCleared}件）。`
+          : '保存データを削除しました。';
+      },
+      getErrorMessage: () => '削除に失敗しました。もう一度お試しください。',
+    });
   });
 
-  section.append(heading, description, button, status);
+  exportButton.addEventListener('click', () => {
+    const scopeValue = exportScopeInputs.find((input) => input.checked)?.value ?? 'all';
+    const compression = compressionToggle.checked ? 'gzip' : 'none';
+
+    void runAction({
+      button: exportButton,
+      pendingText: '書き出し中…',
+      action: () => onExport?.({ scope: scopeValue, compression }),
+      getSuccessMessage: (result = {}) => {
+        if (typeof result.message === 'string' && result.message.length > 0) {
+          return result.message;
+        }
+
+        const windows = Number.isFinite(result.windows) ? result.windows : 0;
+        if (windows === 0) {
+          return '書き出すウィンドウがありません。';
+        }
+
+        return `セッションを書き出しました（ウィンドウ${windows}件）。`;
+      },
+      getErrorMessage: () => '書き出しに失敗しました。もう一度お試しください。',
+    });
+  });
+
+  importButton.addEventListener('click', () => {
+    if (busy) {
+      return;
+    }
+
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', async () => {
+    const [file] = fileInput.files || [];
+    fileInput.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    await runAction({
+      button: importButton,
+      pendingText: '読み込み中…',
+      action: () => onImport?.(file),
+      getSuccessMessage: (result = {}) => {
+        if (typeof result.message === 'string' && result.message.length > 0) {
+          return result.message;
+        }
+
+        const windows = Number.isFinite(result.windows) ? result.windows : 0;
+        return `セッションを読み込みました（ウィンドウ${windows}件）。`;
+      },
+      getErrorMessage: () => '読み込みに失敗しました。ファイルをご確認ください。',
+    });
+  });
+
+  actions.append(clearButton, exportButton, importButton, fileInput);
+
+  section.append(heading, description, options, actions, status);
 
   return {
     element: section,
@@ -365,7 +707,7 @@ function createMaintenancePanel({ onClear } = {}) {
   };
 }
 
-function createWindowCanvas() {
+function createWindowCanvas({ onWindowCountChange } = {}) {
   const section = document.createElement('section');
   section.className = 'workspace__canvas';
 
@@ -383,8 +725,15 @@ function createWindowCanvas() {
 
   const windowRegistry = new Map();
 
+  const notifyWindowCountChange = () => {
+    if (typeof onWindowCountChange === 'function') {
+      onWindowCountChange(windowRegistry.size);
+    }
+  };
+
   const syncEmptyState = () => {
     emptyState.hidden = area.children.length > 0;
+    notifyWindowCountChange();
   };
 
   syncEmptyState();
@@ -520,6 +869,22 @@ function createWindowCanvas() {
     let bookmarkAddButton;
     let bookmarkPrevButton;
     let bookmarkNextButton;
+    let searchForm;
+    let searchInput;
+    let searchSubmitButton;
+    let searchPrevButton;
+    let searchNextButton;
+    let searchSummary;
+    let searchStatus;
+    let searchList;
+    let searchResults = [];
+    let searchQuery = '';
+    let searchIndex = -1;
+    let searchLoading = false;
+    let searchAbortController = null;
+    let outlineList;
+    let outlineStatus;
+    let outlineEntries = [];
     let bookmarkStatus;
     const sanitizeBookmarkValue = (value) => {
       if (!Number.isFinite(value)) {
@@ -681,6 +1046,8 @@ function createWindowCanvas() {
       }
 
       disposed = true;
+
+      cancelSearch();
 
       if (emitClose) {
         dispatchCloseEvent();
@@ -1834,6 +2201,355 @@ function createWindowCanvas() {
       commitRotationChange(DEFAULT_WINDOW_ROTATION);
     };
 
+    const emitSearchEvent = (action) => {
+      const activeResult = searchIndex >= 0 ? searchResults[searchIndex] : null;
+      const searchEvent = new CustomEvent(WINDOW_SEARCH_EVENT, {
+        bubbles: true,
+        detail: {
+          file,
+          query: searchQuery,
+          action,
+          totalResults: searchResults.length,
+          index: searchIndex >= 0 ? searchIndex : null,
+          page: Number.isFinite(activeResult?.page) ? activeResult.page : undefined,
+        },
+      });
+
+      windowElement.dispatchEvent(searchEvent);
+    };
+
+    const syncSearchMetadata = () => {
+      if (searchQuery) {
+        windowElement.dataset.searchQuery = searchQuery;
+      } else {
+        delete windowElement.dataset.searchQuery;
+      }
+
+      if (searchResults.length > 0) {
+        windowElement.dataset.searchCount = String(searchResults.length);
+      } else {
+        delete windowElement.dataset.searchCount;
+      }
+
+      if (searchIndex >= 0) {
+        windowElement.dataset.searchIndex = String(searchIndex);
+      } else {
+        delete windowElement.dataset.searchIndex;
+      }
+
+      if (searchLoading) {
+        windowElement.dataset.searchLoading = 'true';
+      } else {
+        delete windowElement.dataset.searchLoading;
+      }
+    };
+
+    const updateSearchSummary = () => {
+      if (!searchSummary) {
+        return;
+      }
+
+      if (!searchQuery) {
+        searchSummary.textContent = '検索結果: 0 件';
+        return;
+      }
+
+      if (searchResults.length === 0) {
+        searchSummary.textContent = '検索結果: 0 件';
+        return;
+      }
+
+      const current = searchIndex >= 0 ? searchIndex + 1 : 1;
+      searchSummary.textContent = `検索結果: ${current} / ${searchResults.length} 件`;
+    };
+
+    const updateSearchControls = () => {
+      const disabled = searchLoading || searchResults.length === 0;
+
+      if (searchPrevButton) {
+        searchPrevButton.disabled = disabled;
+      }
+
+      if (searchNextButton) {
+        searchNextButton.disabled = disabled;
+      }
+    };
+
+    const setSearchLoading = (loading) => {
+      searchLoading = loading;
+      syncSearchMetadata();
+
+      if (searchSubmitButton) {
+        searchSubmitButton.disabled = loading;
+      }
+
+      if (searchInput) {
+        if (loading) {
+          searchInput.setAttribute('aria-busy', 'true');
+        } else {
+          searchInput.removeAttribute('aria-busy');
+        }
+      }
+
+      updateSearchControls();
+    };
+
+    const renderSearchResults = () => {
+      if (!searchList) {
+        return;
+      }
+
+      searchList.replaceChildren();
+
+      if (!searchQuery) {
+        const placeholder = document.createElement('li');
+        placeholder.className = 'workspace__window-search-empty';
+        placeholder.textContent = '検索キーワードを入力してください。';
+        searchList.append(placeholder);
+        return;
+      }
+
+      if (searchResults.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'workspace__window-search-empty';
+        empty.textContent = '一致する結果は見つかりませんでした。';
+        searchList.append(empty);
+        return;
+      }
+
+      searchResults.forEach((result, index) => {
+        const item = document.createElement('li');
+        item.className = 'workspace__window-search-result';
+        item.dataset.index = String(index);
+
+        if (index === searchIndex) {
+          item.classList.add('workspace__window-search-result--active');
+        }
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'workspace__window-search-result-button';
+        button.addEventListener('click', () => {
+          bringToFront({ persistFocus: false });
+          goToSearchResult(index, { source: 'result' });
+        });
+
+        const pageBadge = document.createElement('span');
+        pageBadge.className = 'workspace__window-search-result-page';
+        pageBadge.textContent = Number.isFinite(result?.page)
+          ? `p.${result.page}`
+          : '—';
+
+        const context = document.createElement('span');
+        context.className = 'workspace__window-search-result-context';
+        context.textContent = typeof result?.context === 'string' ? result.context : '';
+
+        button.append(pageBadge, context);
+        item.append(button);
+        searchList.append(item);
+      });
+    };
+
+    const clearSearchResults = () => {
+      searchResults = [];
+      searchIndex = -1;
+      syncSearchMetadata();
+      updateSearchSummary();
+      updateSearchControls();
+      renderSearchResults();
+
+      if (searchStatus) {
+        searchStatus.hidden = true;
+        searchStatus.textContent = '';
+        searchStatus.classList.remove('workspace__window-search-status--error');
+      }
+    };
+
+    const goToSearchResult = (index, { source = 'navigate', emitEvent = true } = {}) => {
+      if (searchResults.length === 0) {
+        updateSearchSummary();
+        updateSearchControls();
+        renderSearchResults();
+        return;
+      }
+
+      const normalizedIndex = ((Number.isFinite(index) ? Math.trunc(index) : 0) %
+        searchResults.length +
+        searchResults.length) %
+        searchResults.length;
+
+      searchIndex = normalizedIndex;
+      syncSearchMetadata();
+      updateSearchSummary();
+      updateSearchControls();
+      renderSearchResults();
+
+      const target = searchResults[searchIndex];
+
+      if (target && Number.isFinite(target.page)) {
+        commitPageChange(target.page);
+      }
+
+      if (emitEvent) {
+        emitSearchEvent(source);
+      }
+    };
+
+    const cancelSearch = () => {
+      if (searchAbortController) {
+        searchAbortController.abort();
+        searchAbortController = null;
+      }
+
+      setSearchLoading(false);
+    };
+
+    const performSearch = async (query) => {
+      const sanitized = typeof query === 'string' ? query.trim() : '';
+      searchQuery = sanitized;
+      syncSearchMetadata();
+
+      cancelSearch();
+
+      if (!sanitized) {
+        clearSearchResults();
+        return;
+      }
+
+      const controller = new AbortController();
+      searchAbortController = controller;
+      setSearchLoading(true);
+
+      if (searchStatus) {
+        searchStatus.hidden = false;
+        searchStatus.textContent = '検索中…';
+        searchStatus.classList.remove('workspace__window-search-status--error');
+      }
+
+      try {
+        const results = await viewer.search(sanitized, { signal: controller.signal });
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        searchResults = Array.isArray(results) ? results.slice(0, 200) : [];
+        searchIndex = searchResults.length > 0 ? 0 : -1;
+        syncSearchMetadata();
+
+        if (searchResults.length === 0) {
+          updateSearchSummary();
+          updateSearchControls();
+          renderSearchResults();
+
+          if (searchStatus) {
+            searchStatus.hidden = false;
+            searchStatus.textContent = '一致する結果は見つかりませんでした。';
+          }
+        } else {
+          goToSearchResult(searchIndex, { emitEvent: false, source: 'search' });
+
+          if (searchStatus) {
+            searchStatus.hidden = true;
+            searchStatus.textContent = '';
+          }
+        }
+
+        emitSearchEvent('search');
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (searchStatus) {
+          searchStatus.hidden = false;
+          searchStatus.textContent = '検索に失敗しました。';
+          searchStatus.classList.add('workspace__window-search-status--error');
+        }
+      } finally {
+        if (searchAbortController === controller) {
+          searchAbortController = null;
+        }
+
+        setSearchLoading(false);
+      }
+    };
+
+    const syncOutlineMetadata = () => {
+      if (outlineEntries.length > 0) {
+        windowElement.dataset.outlineCount = String(outlineEntries.length);
+      } else {
+        delete windowElement.dataset.outlineCount;
+      }
+    };
+
+    const emitOutlineEvent = (entry, index) => {
+      const outlineEvent = new CustomEvent(WINDOW_OUTLINE_JUMP_EVENT, {
+        bubbles: true,
+        detail: {
+          file,
+          page: Number.isFinite(entry?.page) ? entry.page : undefined,
+          title: typeof entry?.title === 'string' ? entry.title : undefined,
+          index,
+          level: Number.isFinite(entry?.level) ? entry.level : undefined,
+        },
+      });
+
+      windowElement.dispatchEvent(outlineEvent);
+    };
+
+    const renderOutline = (entries) => {
+      if (!outlineList || !outlineStatus) {
+        return;
+      }
+
+      outlineEntries = Array.isArray(entries) ? entries.filter(Boolean) : [];
+      outlineList.replaceChildren();
+      syncOutlineMetadata();
+
+      if (outlineEntries.length === 0) {
+        outlineStatus.hidden = false;
+        outlineStatus.textContent = 'アウトライン情報は見つかりませんでした。';
+        return;
+      }
+
+      outlineStatus.hidden = true;
+
+      outlineEntries.forEach((entry, index) => {
+        const item = document.createElement('li');
+        item.className = 'workspace__window-outline-item';
+        const level = Number.isFinite(entry.level) ? entry.level : 0;
+        item.dataset.level = String(level);
+        item.style.setProperty('--outline-level', String(level));
+
+        const pageBadge = document.createElement('span');
+        pageBadge.className = 'workspace__window-outline-page';
+        pageBadge.textContent = Number.isFinite(entry.page) ? `p.${entry.page}` : '—';
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'workspace__window-outline-button';
+        button.textContent =
+          typeof entry.title === 'string' && entry.title.trim().length > 0
+            ? entry.title.trim()
+            : '無題セクション';
+
+        if (!Number.isFinite(entry.page)) {
+          button.disabled = true;
+          button.classList.add('workspace__window-outline-button--disabled');
+        } else {
+          button.addEventListener('click', () => {
+            bringToFront({ persistFocus: false });
+            commitPageChange(entry.page);
+            emitOutlineEvent(entry, index);
+          });
+        }
+
+        item.append(pageBadge, button);
+        outlineList.append(item);
+      });
+    };
+
     const header = document.createElement('header');
     header.className = 'workspace__window-header';
 
@@ -2237,6 +2953,90 @@ function createWindowCanvas() {
     const toolbar = document.createElement('div');
     toolbar.className = 'workspace__window-toolbar';
 
+    const searchSection = document.createElement('section');
+    searchSection.className = 'workspace__window-search';
+
+    searchForm = document.createElement('form');
+    searchForm.className = 'workspace__window-search-form';
+    searchForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      performSearch(searchInput?.value ?? '');
+    });
+
+    const searchInputId = `workspace-window-search-${Math.random()
+      .toString(36)
+      .slice(2, 9)}`;
+
+    searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.className = 'workspace__window-search-input';
+    searchInput.id = searchInputId;
+    searchInput.placeholder = 'キーワードを検索';
+    searchInput.autocomplete = 'off';
+    searchInput.setAttribute('aria-label', 'PDF内のテキストを検索');
+    searchInput.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
+    searchSubmitButton = document.createElement('button');
+    searchSubmitButton.type = 'submit';
+    searchSubmitButton.className = 'workspace__window-search-submit';
+    searchSubmitButton.textContent = '検索';
+    searchSubmitButton.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
+    const searchInputs = document.createElement('div');
+    searchInputs.className = 'workspace__window-search-inputs';
+    searchInputs.append(searchInput, searchSubmitButton);
+
+    searchPrevButton = document.createElement('button');
+    searchPrevButton.type = 'button';
+    searchPrevButton.className = 'workspace__window-search-prev';
+    searchPrevButton.textContent = '前へ';
+    searchPrevButton.addEventListener('click', () => {
+      bringToFront({ persistFocus: false });
+      goToSearchResult(searchIndex - 1, { source: 'previous' });
+    });
+    searchPrevButton.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
+    searchNextButton = document.createElement('button');
+    searchNextButton.type = 'button';
+    searchNextButton.className = 'workspace__window-search-next';
+    searchNextButton.textContent = '次へ';
+    searchNextButton.addEventListener('click', () => {
+      bringToFront({ persistFocus: false });
+      goToSearchResult(searchIndex + 1, { source: 'next' });
+    });
+    searchNextButton.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
+    searchSummary = document.createElement('span');
+    searchSummary.className = 'workspace__window-search-summary';
+
+    const searchNavigation = document.createElement('div');
+    searchNavigation.className = 'workspace__window-search-navigation';
+    searchNavigation.append(searchPrevButton, searchNextButton, searchSummary);
+
+    searchStatus = document.createElement('p');
+    searchStatus.className = 'workspace__window-search-status';
+    searchStatus.hidden = true;
+
+    searchList = document.createElement('ul');
+    searchList.className = 'workspace__window-search-results';
+    searchList.setAttribute('role', 'list');
+
+    searchForm.append(searchInputs, searchNavigation);
+    searchSection.append(searchForm, searchStatus, searchList);
+
+    renderSearchResults();
+    updateSearchSummary();
+    updateSearchControls();
+    syncSearchMetadata();
+
     const bookmarksSection = document.createElement('section');
     bookmarksSection.className = 'workspace__window-bookmarks';
 
@@ -2595,7 +3395,37 @@ function createWindowCanvas() {
       adjustmentsGroup,
     );
 
-    body.append(toolbar, viewer.element, bookmarksSection, notesSection);
+    const outlineSection = document.createElement('section');
+    outlineSection.className = 'workspace__window-outline';
+
+    const outlineHeader = document.createElement('div');
+    outlineHeader.className = 'workspace__window-outline-header';
+
+    const outlineLabel = document.createElement('span');
+    outlineLabel.className = 'workspace__window-outline-label';
+    outlineLabel.textContent = 'アウトライン';
+
+    outlineHeader.append(outlineLabel);
+
+    outlineStatus = document.createElement('p');
+    outlineStatus.className = 'workspace__window-outline-status';
+    outlineStatus.textContent = 'アウトラインを読み込み中…';
+
+    outlineList = document.createElement('ul');
+    outlineList.className = 'workspace__window-outline-list';
+    outlineList.setAttribute('role', 'list');
+
+    outlineSection.append(outlineHeader, outlineStatus, outlineList);
+    syncOutlineMetadata();
+
+    body.append(
+      toolbar,
+      searchSection,
+      outlineSection,
+      viewer.element,
+      bookmarksSection,
+      notesSection,
+    );
 
     clampBookmarksToBounds();
     syncBookmarksDisplay();
@@ -2620,6 +3450,18 @@ function createWindowCanvas() {
         return renderCurrentPage();
       })
       .catch(() => {});
+
+    void viewer
+      .getOutlineEntries()
+      .then((entries) => {
+        renderOutline(entries);
+      })
+      .catch(() => {
+        if (outlineStatus) {
+          outlineStatus.hidden = false;
+          outlineStatus.textContent = 'アウトラインの読み込みに失敗しました。';
+        }
+      });
 
     windowElement.append(header, body);
 
@@ -2693,6 +3535,23 @@ function createWindowCanvas() {
 
     windowElement.addEventListener('keydown', (event) => {
       if (event.defaultPrevented) {
+        return;
+      }
+
+      const isFindShortcut =
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        (event.key === 'f' || event.key === 'F');
+
+      if (isFindShortcut) {
+        event.preventDefault();
+        bringToFront();
+
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+
         return;
       }
 
@@ -2971,6 +3830,7 @@ function createWindowCanvas() {
     focusWindow,
     cycleFocus,
     closeAllWindows,
+    getWindowEntries,
     getWindowCount,
   };
 }
@@ -2982,12 +3842,53 @@ export function createWorkspace() {
   workspace.dataset.role = 'workspace';
 
   const queue = createFileQueue();
-  const canvas = createWindowCanvas();
+  let canvas = null;
+  let onboardingCompleted = false;
+  let onboarding = null;
+
+  const updateOnboardingVisibility = (count) => {
+    if (!onboarding) {
+      return;
+    }
+
+    const windowCount = Number.isFinite(count)
+      ? count
+      : canvas?.getWindowCount?.() ?? 0;
+
+    onboarding.setActive(!onboardingCompleted && windowCount === 0);
+  };
+
+  const setOnboardingCompletion = async (completed) => {
+    await persistWorkspacePreference(PREF_ONBOARDING_COMPLETED, completed === true);
+    onboardingCompleted = completed === true;
+    updateOnboardingVisibility();
+  };
+
+  onboarding = createOnboarding({
+    onRequestSample: async () => {
+      const sample = createSamplePdfFile();
+      canvas?.openWindow(sample);
+    },
+    onDismiss: async () => {
+      await setOnboardingCompletion(true);
+    },
+  });
+
+  canvas = createWindowCanvas({
+    onWindowCountChange: (count) => {
+      updateOnboardingVisibility(count);
+    },
+  });
+  updateOnboardingVisibility(canvas.getWindowCount());
   const maintenance = createMaintenancePanel({
     onClear: async () => {
       await clearWorkspaceWindows();
       const windowsCleared = canvas.closeAllWindows();
       queue.clear();
+
+      onboardingCompleted = false;
+      onboarding.resetStatus();
+      updateOnboardingVisibility(0);
 
       const cleared = new CustomEvent(WORKSPACE_CACHE_CLEARED_EVENT, {
         bubbles: true,
@@ -2998,7 +3899,164 @@ export function createWorkspace() {
 
       return { windowsCleared };
     },
+    onExport: async ({ scope = 'all', compression = 'none' } = {}) => {
+      const normalizedScope = scope === 'open' ? 'open' : 'all';
+      const windowIds =
+        normalizedScope === 'open'
+          ? canvas
+              .getWindowEntries()
+              .map((entry) => entry.id)
+              .filter((id) => typeof id === 'string' && id.length > 0)
+          : null;
+
+      if (windowIds && windowIds.length === 0) {
+        return { windows: 0, message: '書き出すウィンドウがありません。' };
+      }
+
+      const result = await exportWorkspaceSnapshot({ windowIds, compression });
+      const blob = result?.blob;
+
+      if (!(blob instanceof Blob)) {
+        throw new Error('セッションの書き出しに必要なデータを取得できませんでした。');
+      }
+
+      if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+        throw new Error('ファイルの書き出しに対応していない環境です。');
+      }
+
+      const url = URL.createObjectURL(blob);
+      const timestamp = formatSnapshotTimestamp();
+      const extension = result?.compression === 'gzip' ? 'json.gz' : 'json';
+      const fileName = `gmworkbench-session-${timestamp}.${extension}`;
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.rel = 'noopener';
+      link.style.display = 'none';
+      document.body.append(link);
+      link.click();
+      link.remove();
+
+      if (typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(url);
+      }
+
+      const detail = {
+        windows: Number.isFinite(result?.windows) ? result.windows : 0,
+        fileName,
+      };
+
+      workspace.dispatchEvent(
+        new CustomEvent(WORKSPACE_SESSION_EXPORTED_EVENT, {
+          bubbles: true,
+          detail,
+        }),
+      );
+
+      return {
+        ...detail,
+        compression: result?.compression === 'gzip' ? 'gzip' : 'none',
+      };
+    },
+    onImport: async (file) => {
+      if (!(file instanceof File) && !(file instanceof Blob)) {
+        throw new TypeError('セッションファイルを選択してください。');
+      }
+
+      const snapshot = await importWorkspaceSnapshot(file);
+      const windows = Array.isArray(snapshot?.windows) ? snapshot.windows : [];
+
+      const previousWindows = canvas.closeAllWindows({ emitClose: false });
+      queue.clear();
+      await clearWorkspaceWindows();
+
+      let opened = 0;
+      let lastFocusedId = null;
+      let lastFocusedTime = Number.NEGATIVE_INFINITY;
+
+      const sorted = windows
+        .filter((entry) => entry && entry.file)
+        .sort((a, b) => {
+          const aOrder = Number.isFinite(a.lastFocusedAt)
+            ? a.lastFocusedAt
+            : Number.isFinite(a.openedAt)
+              ? a.openedAt
+              : 0;
+          const bOrder = Number.isFinite(b.lastFocusedAt)
+            ? b.lastFocusedAt
+            : Number.isFinite(b.openedAt)
+              ? b.openedAt
+              : 0;
+
+          return aOrder - bOrder;
+        });
+
+      sorted.forEach((entry) => {
+        const { file: windowFile, ...state } = entry;
+
+        if (!windowFile) {
+          return;
+        }
+
+        const element = canvas.openWindow(windowFile, {
+          ...state,
+          autoFocus: false,
+        });
+
+        if (element && typeof element.dataset?.windowId === 'string') {
+          opened += 1;
+
+          const focusTimestamp = Number.isFinite(state.lastFocusedAt)
+            ? state.lastFocusedAt
+            : Number.isFinite(state.openedAt)
+              ? state.openedAt
+              : 0;
+
+          if (focusTimestamp >= lastFocusedTime) {
+            lastFocusedTime = focusTimestamp;
+            lastFocusedId = element.dataset.windowId;
+          }
+        }
+      });
+
+      if (lastFocusedId) {
+        canvas.focusWindow(lastFocusedId, { persistFocus: false });
+      }
+
+      const detail = {
+        windows: opened,
+        previous: Number.isFinite(previousWindows) ? previousWindows : 0,
+        exportedAt: snapshot?.exportedAt,
+      };
+
+      workspace.dispatchEvent(
+        new CustomEvent(WORKSPACE_SESSION_IMPORTED_EVENT, {
+          bubbles: true,
+          detail,
+        }),
+      );
+
+      return detail;
+    },
   });
+
+  void (async () => {
+    try {
+      const preferences = await loadWorkspacePreferences();
+
+      if (preferences?.[PREF_ONBOARDING_COMPLETED] === true) {
+        onboardingCompleted = true;
+        onboarding.resetStatus();
+      } else {
+        onboardingCompleted = false;
+      }
+    } catch (error) {
+      onboardingCompleted = false;
+    } finally {
+      updateOnboardingVisibility();
+    }
+  })();
 
   workspace.addEventListener('workspace:file-selected', (event) => {
     const files = event.detail?.files;
@@ -3122,6 +4180,7 @@ export function createWorkspace() {
   workspace.append(
     createHeader(),
     createDropZone(),
+    onboarding.element,
     queue.element,
     canvas.element,
     maintenance.element,

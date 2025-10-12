@@ -9,6 +9,14 @@
 4. 最新の一覧が必要なときは `docs/changelog/` を参照するか、`pnpm run docs:print:changelog` などの補助スクリプトで収集してください（スクリプトは任意）。
 
 ## 既存エントリ
+- [2025-10-12 — オンボーディングサンプルの刷新](changelog/2025-10-12-sample-pdf-refresh.md)
+- [2025-10-12 — オンボーディング完了フラグとメンテナンス拡張](changelog/2025-10-12-onboarding-preference.md)
+- [2025-10-12 — スナップショット書き出しオプションの追加](changelog/2025-10-12-snapshot-options.md)
+- [2025-10-12 — E2E カバレッジの拡張](changelog/2025-10-12-e2e-expansion.md)
+- [2025-10-12 — セッション書き出しと読み込み](changelog/2025-10-12-session-export-import.md)
+- [2025-10-12 — Playwright E2E テスト整備](changelog/2025-10-12-e2e-tests.md)
+- [2025-10-12 — PDF内検索とアウトラインナビの追加](changelog/2025-10-12-search-outline.md)
+- [2025-10-12 — 初回オンボーディングガイドの追加](changelog/2025-10-12-onboarding-guide.md)
 - [2025-10-12 — 現状整理とバックログ更新](changelog/2025-10-12-status-and-backlog.md)
 - [2025-10-11 — キャッシュ全削除とメンテナンス動線](changelog/2025-10-11-cache-maintenance.md)
 - [2025-10-11 — ワークスペース基盤と永続化](changelog/2025-10-11-workspace-foundations.md)

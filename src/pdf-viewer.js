@@ -180,24 +180,53 @@ export function createPdfViewer(file) {
   let pdfDocument = null;
   let renderTask = null;
   let lastViewportMetrics = null;
+  let loadTask = null;
+  const pageTextCache = new Map();
 
   const load = async () => {
-    updateStatus(status, 'PDFを読み込み中…');
+    if (loadTask) {
+      return loadTask;
+    }
+
+    loadTask = (async () => {
+      updateStatus(status, 'PDFを読み込み中…');
+
+      try {
+        const data = await readFileData(file);
+        const task = getDocument({ data });
+        pdfDocument = await task.promise;
+        updateStatus(status, '');
+        return pdfDocument;
+      } catch (error) {
+        updateStatus(status, 'PDFの読み込みに失敗しました。');
+        pdfDocument = null;
+        throw error;
+      }
+    })();
 
     try {
-      const data = await readFileData(file);
-      const task = getDocument({ data });
-      pdfDocument = await task.promise;
-      updateStatus(status, '');
-      return pdfDocument;
+      await loadTask;
     } catch (error) {
-      updateStatus(status, 'PDFの読み込みに失敗しました。');
+      loadTask = null;
       throw error;
     }
+
+    return loadTask;
+  };
+
+  const ensureDocument = async () => {
+    if (pdfDocument) {
+      return pdfDocument;
+    }
+
+    pdfDocument = await load();
+    return pdfDocument;
   };
 
   const render = async ({ page, zoom, rotation }) => {
-    if (!pdfDocument) {
+    const documentInstance = await ensureDocument();
+
+    if (!documentInstance) {
       return;
     }
 
@@ -212,7 +241,7 @@ export function createPdfViewer(file) {
     }
 
     try {
-      const pdfPage = await pdfDocument.getPage(page);
+      const pdfPage = await documentInstance.getPage(page);
       const normalizedRotation = Number.isFinite(rotation)
         ? ((Math.round(rotation / 90) * 90) % 360 + 360) % 360
         : 0;
@@ -264,6 +293,181 @@ export function createPdfViewer(file) {
     }
   };
 
+  const getPageText = async (pageNumber) => {
+    const documentInstance = await ensureDocument();
+
+    if (!documentInstance) {
+      return '';
+    }
+
+    const sanitizedPage = Number.isFinite(pageNumber)
+      ? Math.max(1, Math.floor(pageNumber))
+      : 1;
+
+    if (pageTextCache.has(sanitizedPage)) {
+      return pageTextCache.get(sanitizedPage) ?? '';
+    }
+
+    try {
+      const page = await documentInstance.getPage(sanitizedPage);
+
+      if (!page || typeof page.getTextContent !== 'function') {
+        pageTextCache.set(sanitizedPage, '');
+        return '';
+      }
+
+      const content = await page.getTextContent();
+      const text = Array.isArray(content.items)
+        ? content.items
+            .map((item) => (typeof item.str === 'string' ? item.str : ''))
+            .join(' ')
+        : '';
+      const normalized = text.replace(/\s+/g, ' ').trim();
+      pageTextCache.set(sanitizedPage, normalized);
+      return normalized;
+    } catch (error) {
+      pageTextCache.set(sanitizedPage, '');
+      return '';
+    }
+  };
+
+  const search = async (term, { signal } = {}) => {
+    const documentInstance = await ensureDocument();
+
+    if (!documentInstance) {
+      return [];
+    }
+
+    const normalizedQuery = typeof term === 'string' ? term.trim() : '';
+
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    const lowerQuery = normalizedQuery.toLowerCase();
+    const results = [];
+    const total = Number.isFinite(documentInstance.numPages)
+      ? documentInstance.numPages
+      : 0;
+
+    for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
+      if (signal?.aborted) {
+        return [];
+      }
+
+      const text = await getPageText(pageNumber);
+
+      if (!text) {
+        continue;
+      }
+
+      const lower = text.toLowerCase();
+      let startIndex = lower.indexOf(lowerQuery);
+
+      while (startIndex !== -1) {
+        if (signal?.aborted) {
+          return [];
+        }
+
+        const before = Math.max(0, startIndex - 30);
+        const after = Math.min(text.length, startIndex + normalizedQuery.length + 30);
+        const context = text.slice(before, after).replace(/\s+/g, ' ').trim();
+
+        results.push({
+          page: pageNumber,
+          index: startIndex,
+          context,
+        });
+
+        startIndex = lower.indexOf(lowerQuery, startIndex + normalizedQuery.length);
+      }
+    }
+
+    return results;
+  };
+
+  const resolveOutlineDestination = async (documentInstance, destination) => {
+    if (!destination) {
+      return null;
+    }
+
+    let target = destination;
+
+    if (typeof target === 'string' && typeof documentInstance.getDestination === 'function') {
+      try {
+        const resolved = await documentInstance.getDestination(target);
+        target = resolved;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    if (!Array.isArray(target) || !target[0]) {
+      return null;
+    }
+
+    try {
+      const pageIndex = await documentInstance.getPageIndex(target[0]);
+
+      if (!Number.isFinite(pageIndex)) {
+        return null;
+      }
+
+      return pageIndex + 1;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const collectOutline = async (items, level, documentInstance, accumulator) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return;
+    }
+
+    for (const item of items) {
+      if (!item) {
+        continue;
+      }
+
+      const title = typeof item.title === 'string' && item.title.trim().length > 0
+        ? item.title.trim()
+        : '無題セクション';
+      const page = await resolveOutlineDestination(documentInstance, item.dest);
+
+      accumulator.push({
+        title,
+        page,
+        level,
+      });
+
+      if (Array.isArray(item.items) && item.items.length > 0) {
+        await collectOutline(item.items, level + 1, documentInstance, accumulator);
+      }
+    }
+  };
+
+  const getOutlineEntries = async () => {
+    const documentInstance = await ensureDocument();
+
+    if (!documentInstance || typeof documentInstance.getOutline !== 'function') {
+      return [];
+    }
+
+    try {
+      const outline = await documentInstance.getOutline();
+
+      if (!Array.isArray(outline) || outline.length === 0) {
+        return [];
+      }
+
+      const entries = [];
+      await collectOutline(outline, 0, documentInstance, entries);
+      return entries;
+    } catch (error) {
+      return [];
+    }
+  };
+
   const destroy = () => {
     if (renderTask && typeof renderTask.cancel === 'function') {
       try {
@@ -283,6 +487,8 @@ export function createPdfViewer(file) {
     updateStatus(status, '');
     lastViewportMetrics = null;
     updateMetadata(container, {});
+    pageTextCache.clear();
+    loadTask = null;
   };
 
   return {
@@ -301,6 +507,15 @@ export function createPdfViewer(file) {
       }
 
       return { ...lastViewportMetrics };
+    },
+    async getPageText(pageNumber) {
+      return getPageText(pageNumber);
+    },
+    async search(term, options) {
+      return search(term, options);
+    },
+    async getOutlineEntries() {
+      return getOutlineEntries();
     },
   };
 }
