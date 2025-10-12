@@ -10,6 +10,7 @@
 
 ## 既存エントリ
 - [2025-10-12 — タスク Issue 同期ワークフロー](changelog/2025-10-12-task-issue-workflow.md)
+- [2025-10-12 — キャンバス内部ロジックの分割](changelog/2025-10-12-canvas-modules.md)
 - [2025-10-12 — タスクの Issue 自動化](changelog/2025-10-12-task-issue-sync.md)
 - [2025-10-12 — ワークスペースのモジュール分割](changelog/2025-10-12-workspace-modules.md)
 - [2025-10-12 — ワークスペースイベント契約の型定義](changelog/2025-10-12-workspace-event-contract.md)
