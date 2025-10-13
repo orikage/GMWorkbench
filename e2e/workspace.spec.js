@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+import { TITLE } from '../src/workspace/constants.js';
+
 const SAMPLE_BUTTON = 'サンプルPDFを開いてみる';
 
 test.describe('workspace onboarding', () => {
   test('loads the workspace and opens the sample PDF window', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'GMWorkbench' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: `${TITLE} を切り替える` }),
+    ).toBeVisible();
     await expect(page.getByText('PDFをドラッグ＆ドロップ')).toBeVisible();
 
     const sampleButton = page.getByRole('button', { name: SAMPLE_BUTTON });
@@ -27,15 +31,45 @@ test.describe('workspace onboarding', () => {
 
     await dismissButton.click();
 
-    await expect(page.locator('.workspace__onboarding')).toBeHidden();
+    await expect(page.locator('.workspace__onboarding').first()).toHaveAttribute('hidden', '');
   });
 
   test('surfaces export options in the maintenance panel', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByText('書き出しオプション')).toBeVisible();
+    await expect(page.getByText('書き出しオプション')).toHaveText('書き出しオプション');
     await expect(page.getByLabel('保存済みすべて')).toBeChecked();
-    await expect(page.getByLabel('開いているウィンドウのみ')).toBeVisible();
+    await expect(page.getByLabel('開いているウィンドウのみ')).toHaveAttribute('value', 'open');
     await expect(page.getByLabel('gzip 形式で圧縮する（対応環境のみ）')).toBeChecked();
+  });
+});
+
+test.describe('workspace design theme', () => {
+  test('applies the midnight theme tokens to the workspace shell', async ({ page }) => {
+    await page.goto('/');
+
+    const workspace = page.locator('.workspace');
+    const appBar = page.locator('.workspace__app-bar');
+    const scenarioButton = page.locator('.workspace__scenario-button');
+    const utilityButton = page.locator('.workspace__utility-button').first();
+
+    await expect(workspace).toHaveAttribute('data-theme', 'midnight');
+    await expect(workspace).toHaveCSS('background-color', 'rgb(16, 22, 34)');
+    await expect(appBar).toHaveCSS('border-radius', '0px');
+    await expect(scenarioButton).toHaveCSS('border-radius', '0px');
+    await expect(utilityButton).toHaveCSS('border-radius', '0px');
+  });
+
+  test('exposes consistent accent colors for interactive controls', async ({ page }) => {
+    await page.goto('/');
+
+    const accent = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--workspace-accent').trim(),
+    );
+    const activeMenu = page.locator('.workspace__menu-button').first();
+
+    expect(accent).toBe('#2f74ff');
+    await expect(activeMenu).toHaveClass(/workspace__menu-button--active/);
+    await expect(activeMenu).toHaveCSS('border-color', 'rgb(47, 116, 255)');
   });
 });
