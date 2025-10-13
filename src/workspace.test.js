@@ -243,6 +243,8 @@ afterEach(() => {
   } else {
     delete URL.revokeObjectURL;
   }
+
+  document.documentElement.style.cssText = '';
 });
 
 describe('createWorkspace', () => {
@@ -251,12 +253,15 @@ describe('createWorkspace', () => {
 
     expect(workspace).toBeInstanceOf(HTMLElement);
     expect(workspace.dataset.role).toBe('workspace');
-    expect(workspace.querySelector('.workspace__header')).not.toBeNull();
+    expect(workspace.dataset.theme).toBe('midnight');
+    expect(workspace.querySelector('.workspace__app-bar')).not.toBeNull();
     expect(workspace.querySelector('.workspace__drop-zone')).not.toBeNull();
     expect(workspace.querySelector('.workspace__button')?.textContent).toBe('PDFを開く');
     expect(workspace.querySelector('.workspace__file-input')).not.toBeNull();
     expect(workspace.querySelector('.workspace__onboarding')).not.toBeNull();
     expect(workspace.querySelector('.workspace__queue')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__quick-panel')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__menu')).not.toBeNull();
   });
 
   it('shows onboarding guidance when no windows are open and restores it after closing the last window', async () => {

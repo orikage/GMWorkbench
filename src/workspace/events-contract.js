@@ -18,6 +18,7 @@ import {
   WORKSPACE_CACHE_CLEARED_EVENT,
   WORKSPACE_SESSION_EXPORTED_EVENT,
   WORKSPACE_SESSION_IMPORTED_EVENT,
+  WORKSPACE_QUICK_MEMO_REQUEST_EVENT,
   WINDOW_OUTLINE_JUMP_EVENT,
 } from './constants.js';
 
@@ -75,6 +76,12 @@ const CONTRACT = {
         description: 'Selected PDF files queued for import.',
       },
     },
+  },
+  [WORKSPACE_QUICK_MEMO_REQUEST_EVENT]: {
+    target: 'workspace',
+    bubbles: true,
+    description: 'Raised when the quick memo shortcut is requested from the shell.',
+    detail: {},
   },
   [QUEUE_OPEN_EVENT]: {
     target: 'workspace',

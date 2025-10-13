@@ -34,6 +34,7 @@ export const PAGE_HISTORY_LIMIT = 50;
 export const WORKSPACE_CACHE_CLEARED_EVENT = 'workspace:cache-cleared';
 export const WORKSPACE_SESSION_EXPORTED_EVENT = 'workspace:session-exported';
 export const WORKSPACE_SESSION_IMPORTED_EVENT = 'workspace:session-imported';
+export const WORKSPACE_QUICK_MEMO_REQUEST_EVENT = 'workspace:quick-memo-request';
 export const PREF_ONBOARDING_COMPLETED = 'onboardingCompleted';
 export const DEFAULT_WINDOW_ROTATION = 0;
 export const ROTATION_STEP = 90;
