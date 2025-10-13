@@ -39,3 +39,33 @@ test.describe('workspace onboarding', () => {
     await expect(page.getByLabel('gzip 形式で圧縮する（対応環境のみ）')).toBeChecked();
   });
 });
+
+test.describe('workspace design theme', () => {
+  test('applies the midnight theme tokens to the workspace shell', async ({ page }) => {
+    await page.goto('/');
+
+    const workspace = page.locator('.workspace');
+    const appBar = page.locator('.workspace__app-bar');
+    const scenarioButton = page.locator('.workspace__scenario-button');
+    const utilityButton = page.locator('.workspace__utility-button').first();
+
+    await expect(workspace).toHaveAttribute('data-theme', 'midnight');
+    await expect(workspace).toHaveCSS('background-color', 'rgb(16, 22, 34)');
+    await expect(appBar).toHaveCSS('border-radius', '0px');
+    await expect(scenarioButton).toHaveCSS('border-radius', '0px');
+    await expect(utilityButton).toHaveCSS('border-radius', '0px');
+  });
+
+  test('exposes consistent accent colors for interactive controls', async ({ page }) => {
+    await page.goto('/');
+
+    const accent = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--workspace-accent').trim(),
+    );
+    const activeMenu = page.locator('.workspace__menu-button').first();
+
+    expect(accent).toBe('#2f74ff');
+    await expect(activeMenu).toHaveClass(/workspace__menu-button--active/);
+    await expect(activeMenu).toHaveCSS('border-color', 'rgb(47, 116, 255)');
+  });
+});

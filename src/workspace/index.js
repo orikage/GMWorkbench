@@ -13,6 +13,7 @@ import { createDropZone } from './drop-zone.js';
 import { createFileQueue } from './file-queue.js';
 import { createMaintenancePanel } from './maintenance.js';
 import { createOnboarding } from './onboarding.js';
+import { createWorkspaceMenu } from './menu.js';
 import {
   PREF_ONBOARDING_COMPLETED,
   WORKSPACE_CACHE_CLEARED_EVENT,
@@ -20,16 +21,24 @@ import {
   WORKSPACE_SESSION_IMPORTED_EVENT,
 } from './constants.js';
 import { formatSnapshotTimestamp } from './utils.js';
+import { applyWorkspaceTheme } from './theme.js';
 
 export function createWorkspace() {
   const workspace = document.createElement('div');
   workspace.className = 'workspace';
   workspace.dataset.role = 'workspace';
+  applyWorkspaceTheme(workspace);
+
+  const header = createHeader();
+  const quickPanel = createHint();
+  const menu = createWorkspaceMenu();
 
   const queue = createFileQueue();
   let canvas = null;
   let onboardingCompleted = false;
   let onboarding = null;
+
+  const dropZone = createDropZone();
 
   const updateOnboardingVisibility = (count) => {
     if (!onboarding) {
@@ -40,7 +49,9 @@ export function createWorkspace() {
       ? count
       : canvas?.getWindowCount?.() ?? 0;
 
-    onboarding.setActive(!onboardingCompleted && windowCount === 0);
+    const hasWindows = windowCount > 0;
+    onboarding.setActive(!onboardingCompleted && !hasWindows);
+    workspace.classList.toggle('workspace--has-windows', hasWindows);
   };
 
   const setOnboardingCompletion = async (completed) => {
@@ -362,14 +373,23 @@ export function createWorkspace() {
     }
   });
 
-  workspace.append(
-    createHeader(),
-    createDropZone(),
-    onboarding.element,
-    queue.element,
-    canvas.element,
-    maintenance.element,
-    createHint(),
-  );
+  const viewer = document.createElement('section');
+  viewer.className = 'workspace__viewer';
+  viewer.append(canvas.element);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'workspace__viewer-overlay';
+  overlay.append(dropZone, onboarding.element);
+  viewer.append(overlay);
+
+  const body = document.createElement('div');
+  body.className = 'workspace__body';
+  body.append(viewer, menu.element);
+
+  const utilities = document.createElement('aside');
+  utilities.className = 'workspace__side-panel';
+  utilities.append(queue.element, maintenance.element);
+
+  workspace.append(header, body, quickPanel, utilities);
   return workspace;
 }
