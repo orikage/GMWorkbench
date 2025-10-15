@@ -3459,6 +3459,8 @@ describe('createWorkspace', () => {
 
     exportButton.click();
 
+    expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+
     await flushPromises();
 
     expect(storageMocks.exportSnapshot).toHaveBeenCalledTimes(1);
@@ -3467,7 +3469,7 @@ describe('createWorkspace', () => {
       compression: 'gzip',
     });
     expect(createObjectURLSpy).toHaveBeenCalledWith(exportBlob);
-    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:session');
+    expect(revokeObjectURLSpy).not.toHaveBeenCalled();
 
     expect(exportedHandler).toHaveBeenCalledTimes(1);
     const detail = exportedHandler.mock.calls[0][0].detail;
@@ -3483,6 +3485,10 @@ describe('createWorkspace', () => {
     expect(status.hidden).toBe(false);
     expect(status.textContent).toContain('セッションを書き出しました');
     expect(status.classList.contains('workspace__maintenance-status--error')).toBe(false);
+
+    await flushPromises();
+
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:session');
   });
 
   it('shows a warning message when scoped export has no targets', async () => {
