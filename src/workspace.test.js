@@ -262,6 +262,13 @@ describe('createWorkspace', () => {
     expect(workspace.querySelector('.workspace__queue')).not.toBeNull();
     expect(workspace.querySelector('.workspace__quick-panel')).not.toBeNull();
     expect(workspace.querySelector('.workspace__menu')).not.toBeNull();
+
+    const utilityButtons = Array.from(workspace.querySelectorAll('.workspace__utility-button'));
+    const utilityIds = utilityButtons.map((button) => button.dataset.utilityId);
+
+    expect(utilityButtons).toHaveLength(3);
+    expect(utilityIds).toEqual(expect.arrayContaining(['layers', 'reference', 'settings']));
+    expect(utilityIds).not.toContain('notifications');
   });
 
   it('exposes workspace menu state through data attributes', () => {
