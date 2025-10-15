@@ -632,6 +632,128 @@ describe('createWorkspace', () => {
     expect(resizeHandle?.getAttribute('aria-hidden')).toBe('true');
   });
 
+  it('persists window type and layout metadata across reloads', async () => {
+    const fileA = new File(['A'], 'layout-a.pdf', {
+      type: 'application/pdf',
+      lastModified: 111,
+    });
+    const fileB = new File(['B'], 'layout-b.pdf', {
+      type: 'application/pdf',
+      lastModified: 222,
+    });
+
+    storageMocks.load.mockResolvedValue([
+      {
+        id: 'layout-window-a',
+        file: fileA,
+        left: 32,
+        top: 24,
+        width: 460,
+        height: 340,
+        page: 1,
+        zoom: 1,
+        openedAt: 10,
+        lastFocusedAt: 20,
+        persisted: true,
+        windowType: 'pdf',
+        layout: {
+          version: 1,
+          zIndex: 120,
+          bounds: { left: 32, top: 24, width: 460, height: 340 },
+          restoreBounds: { left: 32, top: 24, width: 460, height: 340 },
+          pinned: false,
+          maximized: false,
+        },
+      },
+      {
+        id: 'layout-window-b',
+        file: fileB,
+        left: 280,
+        top: 180,
+        width: 420,
+        height: 320,
+        page: 2,
+        zoom: 1.1,
+        pinned: true,
+        openedAt: 30,
+        lastFocusedAt: 40,
+        persisted: true,
+        windowType: 'pdf',
+        layout: {
+          version: 1,
+          zIndex: 10020,
+          bounds: { left: 280, top: 180, width: 420, height: 320 },
+          restoreBounds: { left: 280, top: 180, width: 420, height: 320 },
+          pinned: true,
+          maximized: false,
+        },
+      },
+    ]);
+
+    const workspace = createWorkspace();
+
+    await flushPromises();
+    await flushPromises();
+
+    const windowA = workspace.querySelector('[data-window-id="layout-window-a"]');
+    const windowB = workspace.querySelector('[data-window-id="layout-window-b"]');
+
+    expect(windowA).toBeInstanceOf(HTMLElement);
+    expect(windowB).toBeInstanceOf(HTMLElement);
+
+    if (!(windowA instanceof HTMLElement) || !(windowB instanceof HTMLElement)) {
+      throw new Error('restored windows are required for the layout test');
+    }
+
+    expect(windowA.dataset.windowType).toBe('pdf');
+    expect(windowB.dataset.windowType).toBe('pdf');
+
+    expect(Number.parseInt(windowA.style.zIndex ?? '', 10)).toBe(120);
+    expect(Number.parseInt(windowB.style.zIndex ?? '', 10)).toBeGreaterThanOrEqual(10020);
+    expect(windowB.classList.contains('workspace__window--pinned')).toBe(true);
+
+    storageMocks.persist.mockClear();
+
+    windowB.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(storageMocks.persist).toHaveBeenCalled();
+
+    const lastPersist = storageMocks.persist.mock.calls.at(-1);
+
+    if (!lastPersist) {
+      throw new Error('layout persistence call is required');
+    }
+
+    const descriptor = lastPersist[0];
+
+    expect(descriptor?.windowType).toBe('pdf');
+    expect(descriptor?.layout?.version).toBe(1);
+    expect(descriptor?.layout?.pinned).toBe(true);
+    expect(descriptor?.layout?.maximized).toBe(false);
+    expect(descriptor?.layout?.zIndex).toBe(
+      Number.parseInt(windowB.style.zIndex ?? '0', 10),
+    );
+    expect(descriptor?.layout?.bounds).toEqual({
+      left: Number.parseFloat(windowB.style.left ?? '0'),
+      top: Number.parseFloat(windowB.style.top ?? '0'),
+      width: Number.parseFloat(windowB.style.width ?? '0'),
+      height: Number.parseFloat(windowB.style.height ?? '0'),
+    });
+    expect(descriptor?.restoreLeft).toBeCloseTo(280, 6);
+    expect(descriptor?.restoreTop).toBeCloseTo(180, 6);
+    expect(descriptor?.restoreWidth).toBeCloseTo(420, 6);
+    expect(descriptor?.restoreHeight).toBeCloseTo(320, 6);
+    expect(descriptor?.layout?.restoreBounds).toEqual({
+      left: descriptor.restoreLeft,
+      top: descriptor.restoreTop,
+      width: descriptor.restoreWidth,
+      height: descriptor.restoreHeight,
+    });
+  });
+
   it('restores stored page history metadata and keeps navigation controls aligned', async () => {
     const persistedFile = new File(['history'], 'history-stored.pdf', {
       type: 'application/pdf',
