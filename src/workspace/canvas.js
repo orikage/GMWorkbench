@@ -35,6 +35,7 @@ import {
   WINDOW_ZOOM_CHANGE_EVENT,
   WINDOW_ZOOM_STEP,
 } from './constants.js';
+import { createMemoWindow } from './window-memo.js';
 import { createWindowNotes } from './window-notes.js';
 import { createWindowSearch } from './window-search.js';
 import { createWindowToolbar } from './window-toolbar.js';
@@ -69,6 +70,15 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
   };
 
   syncEmptyState();
+
+  const createWindowId = (prefix = 'window') => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+
+    const sanitized = typeof prefix === 'string' && prefix.length > 0 ? prefix : 'window';
+    return `${sanitized}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  };
 
   let zIndexCounter = 1;
   let pinnedZIndexCounter = 10000;
@@ -122,9 +132,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     const windowId =
       typeof options.id === 'string' && options.id.length > 0
         ? options.id
-        : typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `window-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        : createWindowId('window');
 
     windowElement.dataset.windowId = windowId;
 
@@ -2244,6 +2252,345 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     return windowElement;
   };
 
+  const openMemoWindow = (options = {}) => {
+    const offsetIndex = area.children.length;
+    const defaultLeft = offsetIndex * WINDOW_STACK_OFFSET;
+    const defaultTop = offsetIndex * WINDOW_STACK_OFFSET;
+
+    const initialLeft = Number.isFinite(options.left) ? options.left : defaultLeft;
+    const initialTop = Number.isFinite(options.top) ? options.top : defaultTop;
+    const initialWidth = Number.isFinite(options.width) ? options.width : DEFAULT_WINDOW_WIDTH;
+    const initialHeight = Number.isFinite(options.height) ? options.height : DEFAULT_WINDOW_HEIGHT;
+    const shouldAutoFocus = options.autoFocus !== false;
+
+    const windowId =
+      typeof options.id === 'string' && options.id.length > 0
+        ? options.id
+        : createWindowId('memo');
+
+    let disposeWindow = () => {};
+
+    const memoController = createMemoWindow({
+      title:
+        typeof options.title === 'string' && options.title.trim().length > 0
+          ? options.title.trim()
+          : undefined,
+      initialContent: typeof options.content === 'string' ? options.content : '',
+      placeholder:
+        typeof options.placeholder === 'string' && options.placeholder.length > 0
+          ? options.placeholder
+          : undefined,
+      onCloseRequest: () => {
+        disposeWindow({ emitClose: true });
+      },
+    });
+
+    const windowElement = memoController?.element;
+
+    if (!(windowElement instanceof HTMLElement)) {
+      throw new Error('メモウィンドウの生成に失敗しました。');
+    }
+
+    windowElement.classList.add('workspace__window');
+    windowElement.classList.add('workspace__window--memo');
+    windowElement.dataset.windowId = windowId;
+    windowElement.dataset.windowType = 'memo';
+    windowElement.tabIndex = 0;
+    windowElement.style.left = `${initialLeft}px`;
+    windowElement.style.top = `${initialTop}px`;
+    windowElement.style.width = `${initialWidth}px`;
+    windowElement.style.height = `${initialHeight}px`;
+
+    const header = memoController?.header;
+
+    if (!(header instanceof HTMLElement)) {
+      throw new Error('メモウィンドウにはヘッダー要素が必要です。');
+    }
+
+    let dragMoveHandler = null;
+    let dragEndHandler = null;
+    let resizeMoveHandler = null;
+    let resizeEndHandler = null;
+    let disposed = false;
+
+    let openedAt = Number.isFinite(options.openedAt) ? options.openedAt : Date.now();
+    let lastFocusedAt = Number.isFinite(options.lastFocusedAt) ? options.lastFocusedAt : openedAt;
+
+    const syncFocusMetadata = () => {
+      windowElement.dataset.openedAt = String(openedAt);
+      windowElement.dataset.lastFocusedAt = String(lastFocusedAt);
+    };
+
+    syncFocusMetadata();
+
+    const assignZIndex = (customValue) => {
+      if (Number.isFinite(customValue)) {
+        windowElement.style.zIndex = String(customValue);
+        zIndexCounter = Math.max(zIndexCounter, customValue + 1);
+        return;
+      }
+
+      windowElement.style.zIndex = String(zIndexCounter);
+      zIndexCounter += 1;
+    };
+
+    const bringToFront = ({ persistFocus = true } = {}) => {
+      area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
+        if (otherWindow !== windowElement) {
+          otherWindow.classList.remove('workspace__window--active');
+        }
+      });
+      windowElement.classList.add('workspace__window--active');
+      assignZIndex();
+
+      if (persistFocus) {
+        lastFocusedAt = Date.now();
+      }
+
+      syncFocusMetadata();
+      return windowElement;
+    };
+
+    if (typeof memoController?.setFocusDelegate === 'function') {
+      memoController.setFocusDelegate(() => {
+        bringToFront({ persistFocus: false });
+      });
+    }
+
+    const getWindowSize = () => ({
+      width: parsePixels(windowElement.style.width, initialWidth),
+      height: parsePixels(windowElement.style.height, initialHeight),
+    });
+
+    const getWindowBounds = () => ({
+      left: parsePixels(windowElement.style.left, initialLeft),
+      top: parsePixels(windowElement.style.top, initialTop),
+      width: parsePixels(windowElement.style.width, initialWidth),
+      height: parsePixels(windowElement.style.height, initialHeight),
+    });
+
+    const clampBounds = (bounds) => {
+      const proposedLeft = Number.isFinite(bounds?.left) ? bounds.left : initialLeft;
+      const proposedTop = Number.isFinite(bounds?.top) ? bounds.top : initialTop;
+      const proposedWidth = Number.isFinite(bounds?.width) ? bounds.width : initialWidth;
+      const proposedHeight = Number.isFinite(bounds?.height) ? bounds.height : initialHeight;
+
+      const { width: areaWidth, height: areaHeight } = getAreaSize();
+
+      const width = Math.min(Math.max(MIN_WINDOW_WIDTH, proposedWidth), areaWidth);
+      const height = Math.min(Math.max(MIN_WINDOW_HEIGHT, proposedHeight), areaHeight);
+      const maxLeft = Math.max(0, areaWidth - width);
+      const maxTop = Math.max(0, areaHeight - height);
+
+      return {
+        left: Math.min(Math.max(0, proposedLeft), maxLeft),
+        top: Math.min(Math.max(0, proposedTop), maxTop),
+        width,
+        height,
+      };
+    };
+
+    const clampPosition = (left, top) => {
+      const { width: areaWidth, height: areaHeight } = getAreaSize();
+      const { width: windowWidth, height: windowHeight } = getWindowSize();
+      const maxLeft = Math.max(0, areaWidth - windowWidth);
+      const maxTop = Math.max(0, areaHeight - windowHeight);
+
+      return {
+        left: Math.min(Math.max(0, left), maxLeft),
+        top: Math.min(Math.max(0, top), maxTop),
+      };
+    };
+
+    const applyBounds = ({ left, top, width, height }) => {
+      windowElement.style.left = `${left}px`;
+      windowElement.style.top = `${top}px`;
+      windowElement.style.width = `${width}px`;
+      windowElement.style.height = `${height}px`;
+    };
+
+    const handleWindowFocus = () => {
+      bringToFront();
+    };
+
+    const handleWindowMouseDown = (event) => {
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest('button, textarea, input, [contenteditable="true"]')
+      ) {
+        return;
+      }
+
+      bringToFront();
+      windowElement.focus({ preventScroll: true });
+    };
+
+    const handleDragEnd = () => {
+      if (dragMoveHandler) {
+        document.removeEventListener('mousemove', dragMoveHandler);
+        dragMoveHandler = null;
+      }
+
+      if (dragEndHandler) {
+        document.removeEventListener('mouseup', dragEndHandler);
+        dragEndHandler = null;
+      }
+    };
+
+    const handleHeaderMouseDown = (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest('button, textarea, input, [contenteditable="true"]')
+      ) {
+        return;
+      }
+
+      bringToFront();
+      event.preventDefault();
+
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const bounds = getWindowBounds();
+
+      dragMoveHandler = (moveEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = moveEvent.clientY - startY;
+        const { left, top } = clampPosition(bounds.left + deltaX, bounds.top + deltaY);
+
+        windowElement.style.left = `${left}px`;
+        windowElement.style.top = `${top}px`;
+      };
+
+      dragEndHandler = () => {
+        handleDragEnd();
+      };
+
+      document.addEventListener('mousemove', dragMoveHandler);
+      document.addEventListener('mouseup', dragEndHandler);
+    };
+
+    const resizeHandle = document.createElement('button');
+    resizeHandle.type = 'button';
+    resizeHandle.className = 'workspace__window-resize';
+    resizeHandle.setAttribute('aria-label', 'メモウィンドウのサイズを変更');
+
+    const handleResizeEnd = () => {
+      windowElement.classList.remove('workspace__window--resizing');
+
+      if (resizeMoveHandler) {
+        document.removeEventListener('mousemove', resizeMoveHandler);
+        resizeMoveHandler = null;
+      }
+
+      if (resizeEndHandler) {
+        document.removeEventListener('mouseup', resizeEndHandler);
+        resizeEndHandler = null;
+      }
+    };
+
+    const handleResizeStart = (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      bringToFront();
+      event.preventDefault();
+
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const bounds = getWindowBounds();
+
+      windowElement.classList.add('workspace__window--resizing');
+
+      resizeMoveHandler = (moveEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = moveEvent.clientY - startY;
+
+        const nextBounds = clampBounds({
+          left: bounds.left,
+          top: bounds.top,
+          width: bounds.width + deltaX,
+          height: bounds.height + deltaY,
+        });
+
+        applyBounds(nextBounds);
+      };
+
+      resizeEndHandler = () => {
+        handleResizeEnd();
+      };
+
+      document.addEventListener('mousemove', resizeMoveHandler);
+      document.addEventListener('mouseup', resizeEndHandler);
+    };
+
+    const cleanupInteractions = () => {
+      handleDragEnd();
+      handleResizeEnd();
+      header.removeEventListener('mousedown', handleHeaderMouseDown);
+      resizeHandle.removeEventListener('mousedown', handleResizeStart);
+      windowElement.removeEventListener('focus', handleWindowFocus);
+      windowElement.removeEventListener('mousedown', handleWindowMouseDown);
+    };
+
+    disposeWindow = ({ emitClose = true } = {}) => {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+      cleanupInteractions();
+      resizeHandle.remove();
+      windowElement.remove();
+      windowRegistry.delete(windowId);
+      syncEmptyState();
+
+      if (emitClose) {
+        // Memo windows are lightweight; no persistence is attempted.
+      }
+    };
+
+    header.addEventListener('mousedown', handleHeaderMouseDown);
+    resizeHandle.addEventListener('mousedown', handleResizeStart);
+    windowElement.addEventListener('focus', handleWindowFocus);
+    windowElement.addEventListener('mousedown', handleWindowMouseDown);
+
+    windowElement.append(resizeHandle);
+    area.append(windowElement);
+
+    windowRegistry.set(windowId, {
+      element: windowElement,
+      bringToFront,
+      dispose: ({ emitClose = true } = {}) => {
+        disposeWindow({ emitClose });
+      },
+      getLastFocused: () => lastFocusedAt,
+      getOpenedAt: () => openedAt,
+      getTitle: () => (typeof memoController?.getTitle === 'function' ? memoController.getTitle() : 'メモ'),
+      id: windowId,
+    });
+
+    syncEmptyState();
+
+    if (shouldAutoFocus) {
+      bringToFront();
+
+      if (typeof memoController?.focusEditor === 'function') {
+        memoController.focusEditor();
+      } else {
+        windowElement.focus({ preventScroll: true });
+      }
+    } else {
+      assignZIndex();
+    }
+
+    return windowElement;
+  };
+
   const getWindowEntries = () => {
     return Array.from(windowRegistry.entries())
       .map(([id, entry]) => ({
@@ -2345,6 +2692,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
   return {
     element: section,
     openWindow,
+    openMemoWindow,
     focusWindow,
     cycleFocus,
     closeAllWindows,
