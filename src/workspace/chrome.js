@@ -2,7 +2,6 @@ import { TAGLINE, TITLE, WORKSPACE_QUICK_MEMO_REQUEST_EVENT } from './constants.
 import { createWorkspaceIcon } from './icons.js';
 
 const UTILITY_BUTTONS = [
-  { id: 'notifications', label: '通知パネル', icon: 'bell' },
   { id: 'layers', label: 'レイヤー', icon: 'layers' },
   { id: 'reference', label: '資料ライブラリ', icon: 'book' },
   { id: 'settings', label: '設定', icon: 'settings' },
