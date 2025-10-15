@@ -268,28 +268,14 @@ describe('createWorkspace', () => {
     const workspace = createWorkspace();
 
     expect(workspace.dataset.activeMenu).toBe('browser');
-    expect(workspace.dataset.activeTrack).toBe('bgm01');
-    expect(workspace.dataset.menuVolume).toBe('68');
+    expect(workspace.dataset.activeTrack).toBeUndefined();
+    expect(workspace.dataset.menuVolume).toBeUndefined();
 
     const mapButton = workspace.querySelector('[data-menu-id="map"]');
     mapButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(workspace.dataset.activeMenu).toBe('map');
-
-    const trackButton = workspace.querySelector('[data-track-id="bgm02"]');
-    trackButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(workspace.dataset.activeTrack).toBe('bgm02');
-
-    const slider = workspace.querySelector('.workspace__menu-range');
-    expect(slider).toBeInstanceOf(HTMLInputElement);
-
-    if (!(slider instanceof HTMLInputElement)) {
-      throw new Error('expected the workspace menu slider to be present');
-    }
-
-    slider.value = '73';
-    slider.dispatchEvent(new Event('input', { bubbles: true }));
-
-    expect(workspace.dataset.menuVolume).toBe('73');
+    expect(workspace.querySelector('.workspace__menu-range')).toBeNull();
+    expect(workspace.querySelector('.workspace__menu-track')).toBeNull();
   });
 
   it('shows onboarding guidance when no windows are open and restores it after closing the last window', async () => {
