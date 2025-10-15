@@ -14,6 +14,8 @@
 - [2025-10-12 — タスクの Issue 自動化](changelog/2025-10-12-task-issue-sync.md)
 - [2025-10-12 — ワークスペースのモジュール分割](changelog/2025-10-12-workspace-modules.md)
 - [2025-10-12 — ワークスペースイベント契約の型定義](changelog/2025-10-12-workspace-event-contract.md)
+- [2025-10-12 — ワークスペースメニューのイベント連携](changelog/2025-10-12-workspace-menu-events.md)
+- [2025-10-12 — Playwright テストのシェル整合](changelog/2025-10-12-playwright-theme-alignment.md)
 - [2025-10-12 — オンボーディングサンプルの刷新](changelog/2025-10-12-sample-pdf-refresh.md)
 - [2025-10-12 — オンボーディング完了フラグとメンテナンス拡張](changelog/2025-10-12-onboarding-preference.md)
 - [2025-10-12 — スナップショット書き出しオプションの追加](changelog/2025-10-12-snapshot-options.md)

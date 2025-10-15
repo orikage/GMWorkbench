@@ -19,6 +19,9 @@ import {
   WORKSPACE_CACHE_CLEARED_EVENT,
   WORKSPACE_SESSION_EXPORTED_EVENT,
   WORKSPACE_SESSION_IMPORTED_EVENT,
+  WORKSPACE_MENU_CHANGE_EVENT,
+  WORKSPACE_TRACK_CHANGE_EVENT,
+  WORKSPACE_VOLUME_CHANGE_EVENT,
 } from './constants.js';
 import { formatSnapshotTimestamp } from './utils.js';
 import { applyWorkspaceTheme } from './theme.js';
@@ -32,6 +35,34 @@ export function createWorkspace() {
   const header = createHeader();
   const quickPanel = createHint();
   const menu = createWorkspaceMenu();
+
+  const syncMenuDataset = () => {
+    const activeMenuId = menu.getActiveId();
+    const activeTrackId = menu.getActiveTrackId();
+    const volume = menu.getVolume();
+
+    workspace.dataset.activeMenu = typeof activeMenuId === 'string' ? activeMenuId : '';
+    workspace.dataset.activeTrack = typeof activeTrackId === 'string' ? activeTrackId : '';
+    workspace.dataset.menuVolume = Number.isFinite(volume) ? String(volume) : '';
+  };
+
+  syncMenuDataset();
+
+  workspace.addEventListener(WORKSPACE_MENU_CHANGE_EVENT, (event) => {
+    const id = typeof event?.detail?.id === 'string' ? event.detail.id : '';
+    workspace.dataset.activeMenu = id;
+  });
+
+  workspace.addEventListener(WORKSPACE_TRACK_CHANGE_EVENT, (event) => {
+    const id = typeof event?.detail?.id === 'string' ? event.detail.id : '';
+    workspace.dataset.activeTrack = id;
+  });
+
+  workspace.addEventListener(WORKSPACE_VOLUME_CHANGE_EVENT, (event) => {
+    const value = event?.detail?.value;
+    const numeric = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : menu.getVolume();
+    workspace.dataset.menuVolume = Number.isFinite(numeric) ? String(numeric) : '';
+  });
 
   const queue = createFileQueue();
   let canvas = null;

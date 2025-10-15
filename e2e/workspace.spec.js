@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+import { TITLE } from '../src/workspace/constants.js';
+
 const SAMPLE_BUTTON = 'サンプルPDFを開いてみる';
 
 test.describe('workspace onboarding', () => {
   test('loads the workspace and opens the sample PDF window', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'GMWorkbench' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: `${TITLE} を切り替える` }),
+    ).toBeVisible();
     await expect(page.getByText('PDFをドラッグ＆ドロップ')).toBeVisible();
 
     const sampleButton = page.getByRole('button', { name: SAMPLE_BUTTON });
@@ -27,15 +31,15 @@ test.describe('workspace onboarding', () => {
 
     await dismissButton.click();
 
-    await expect(page.locator('.workspace__onboarding')).toBeHidden();
+    await expect(page.locator('.workspace__onboarding').first()).toHaveAttribute('hidden', '');
   });
 
   test('surfaces export options in the maintenance panel', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByText('書き出しオプション')).toBeVisible();
+    await expect(page.getByText('書き出しオプション')).toHaveText('書き出しオプション');
     await expect(page.getByLabel('保存済みすべて')).toBeChecked();
-    await expect(page.getByLabel('開いているウィンドウのみ')).toBeVisible();
+    await expect(page.getByLabel('開いているウィンドウのみ')).toHaveAttribute('value', 'open');
     await expect(page.getByLabel('gzip 形式で圧縮する（対応環境のみ）')).toBeChecked();
   });
 });
