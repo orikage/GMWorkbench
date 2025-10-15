@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WORKSPACE_MENU_CHANGE_EVENT } from './constants.js';
+import {
+  WORKSPACE_MENU_CHANGE_EVENT,
+  WORKSPACE_TRACK_CHANGE_EVENT,
+  WORKSPACE_VOLUME_CHANGE_EVENT,
+} from './constants.js';
 import { createWorkspaceMenu } from './menu.js';
 
 describe('createWorkspaceMenu', () => {
@@ -50,6 +54,7 @@ describe('createWorkspaceMenu', () => {
   it('renders only the menu buttons without additional controls', () => {
     const { element } = createWorkspaceMenu();
 
+    const activeTrack = element.querySelector('.workspace__menu-track--active');
     expect(activeTrack).not.toBeNull();
     expect(activeTrack?.dataset.trackId).toBeDefined();
   });
