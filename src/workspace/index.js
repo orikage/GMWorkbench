@@ -20,6 +20,9 @@ import {
   WORKSPACE_SESSION_EXPORTED_EVENT,
   WORKSPACE_SESSION_IMPORTED_EVENT,
   WORKSPACE_MENU_CHANGE_EVENT,
+  WORKSPACE_QUICK_MEMO_REQUEST_EVENT,
+  WORKSPACE_TRACK_CHANGE_EVENT,
+  WORKSPACE_VOLUME_CHANGE_EVENT,
 } from './constants.js';
 import { formatSnapshotTimestamp } from './utils.js';
 import { applyWorkspaceTheme } from './theme.js';
@@ -293,6 +296,17 @@ export function createWorkspace() {
     }
 
     canvas.openWindow(file);
+  });
+
+  workspace.addEventListener(WORKSPACE_QUICK_MEMO_REQUEST_EVENT, () => {
+    if (typeof canvas?.openMemoWindow !== 'function') {
+      return;
+    }
+
+    canvas.openMemoWindow({
+      title: 'クイックメモ',
+      placeholder: 'ひらめきを逃さずにメモできます。',
+    });
   });
 
   void (async () => {

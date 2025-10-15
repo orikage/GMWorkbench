@@ -80,6 +80,7 @@ vi.mock('./workspace-storage.js', () => ({
   importWorkspaceSnapshot: storageMocks.importSnapshot,
 }));
 
+import { WORKSPACE_QUICK_MEMO_REQUEST_EVENT } from './workspace/constants.js';
 import { createWorkspace } from './workspace.js';
 
 const originalGetContext = HTMLCanvasElement.prototype.getContext;
@@ -316,6 +317,109 @@ describe('createWorkspace', () => {
     expect(storageMocks.loadPreferences).toHaveBeenCalledTimes(1);
     expect(onboarding).toBeInstanceOf(HTMLElement);
     expect(onboarding?.hidden).toBe(true);
+  });
+
+  it('creates memo windows that support focus, movement, and resizing', () => {
+    const workspace = createWorkspace();
+    const area = workspace.querySelector('.workspace__windows');
+
+    expect(area).toBeInstanceOf(HTMLElement);
+
+    if (!(area instanceof HTMLElement)) {
+      throw new Error('memo tests require the workspace canvas element');
+    }
+
+    area.getBoundingClientRect = () => ({
+      width: 1200,
+      height: 800,
+      top: 0,
+      left: 0,
+      right: 1200,
+      bottom: 800,
+    });
+
+    workspace.dispatchEvent(
+      new CustomEvent(WORKSPACE_QUICK_MEMO_REQUEST_EVENT, { bubbles: true }),
+    );
+
+    const firstMemo = workspace.querySelector('.workspace__window--memo');
+
+    expect(firstMemo).toBeInstanceOf(HTMLElement);
+
+    if (!(firstMemo instanceof HTMLElement)) {
+      throw new Error('memo window element should exist after quick memo request');
+    }
+
+    expect(firstMemo.dataset.windowType).toBe('memo');
+
+    const textarea = firstMemo.querySelector('textarea');
+
+    expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
+    expect(firstMemo.classList.contains('workspace__window--active')).toBe(true);
+
+    const header = firstMemo.querySelector('.workspace__window-header');
+
+    expect(header).toBeInstanceOf(HTMLElement);
+
+    if (!(header instanceof HTMLElement)) {
+      throw new Error('memo window header is required for drag tests');
+    }
+
+    const initialLeft = firstMemo.style.left;
+    const initialTop = firstMemo.style.top;
+
+    header.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }),
+    );
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 90, clientY: 70 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 90, clientY: 70 }));
+
+    expect(firstMemo.style.left).not.toBe(initialLeft);
+    expect(firstMemo.style.top).not.toBe(initialTop);
+
+    const resizeHandle = firstMemo.querySelector('.workspace__window-resize');
+
+    expect(resizeHandle).toBeInstanceOf(HTMLElement);
+
+    if (!(resizeHandle instanceof HTMLElement)) {
+      throw new Error('memo window resize handle is required for resizing tests');
+    }
+
+    const startingWidth = Number.parseFloat(firstMemo.style.width);
+    const startingHeight = Number.parseFloat(firstMemo.style.height);
+
+    resizeHandle.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 260, clientY: 220 }),
+    );
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 320, clientY: 280 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 320, clientY: 280 }));
+
+    expect(Number.parseFloat(firstMemo.style.width)).toBeGreaterThan(startingWidth);
+    expect(Number.parseFloat(firstMemo.style.height)).toBeGreaterThan(startingHeight);
+
+    workspace.dispatchEvent(
+      new CustomEvent(WORKSPACE_QUICK_MEMO_REQUEST_EVENT, { bubbles: true }),
+    );
+
+    const memoWindows = workspace.querySelectorAll('.workspace__window--memo');
+
+    expect(memoWindows.length).toBe(2);
+
+    const secondMemo = memoWindows[1];
+
+    expect(secondMemo.classList.contains('workspace__window--active')).toBe(true);
+
+    header.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 20, clientY: 20 }),
+    );
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 20, clientY: 20 }));
+
+    expect(firstMemo.classList.contains('workspace__window--active')).toBe(true);
+    expect(
+      Number.parseInt(firstMemo.style.zIndex || '0', 10) >
+        Number.parseInt(secondMemo.style.zIndex || '0', 10),
+    ).toBe(true);
+
   });
 
   it('opens the sample PDF from onboarding without requiring a manual file', async () => {
