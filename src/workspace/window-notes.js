@@ -1,4 +1,5 @@
 import { WINDOW_NOTES_CHANGE_EVENT } from './constants.js';
+import { copyAccessibleLabelToTitle } from './utils.js';
 
 export function createWindowNotes({
   file,
@@ -31,6 +32,7 @@ export function createWindowNotes({
   notesTextarea.rows = 4;
   notesTextarea.placeholder = 'シーンの補足やアドリブ案をメモできます。';
   notesTextarea.value = notesContent;
+  copyAccessibleLabelToTitle(notesTextarea, notesLabel.textContent);
 
   notesTextarea.addEventListener('focus', () => {
     if (typeof bringToFront === 'function') {
@@ -75,9 +77,12 @@ export function createWindowNotes({
 
   function updateTitle(windowTitle) {
     if (typeof windowTitle === 'string' && windowTitle.length > 0) {
-      notesTextarea.setAttribute('aria-label', `${windowTitle} のメモ`);
+      const label = `${windowTitle} のメモ`;
+      notesTextarea.setAttribute('aria-label', label);
+      copyAccessibleLabelToTitle(notesTextarea, label);
     } else {
       notesTextarea.removeAttribute('aria-label');
+      copyAccessibleLabelToTitle(notesTextarea, '');
     }
   }
 

@@ -85,6 +85,20 @@ describe('createWorkspaceMenu', () => {
     expect(label?.classList.contains('workspace__sr-only')).toBe(true);
   });
 
+  it('duplicates accessible labels to the title attribute for hover hints', () => {
+    const menu = createWorkspaceMenu();
+    const browserButton = menu.element.querySelector('[data-menu-id="browser"]');
+    const trackButton = menu.element.querySelector('[data-track-id="bgm01"]');
+    const slider = menu.element.querySelector('.workspace__menu-range');
+
+    expect(browserButton).toBeInstanceOf(HTMLButtonElement);
+    expect(browserButton?.getAttribute('title')).toBe('PDFブラウザ');
+    expect(trackButton).toBeInstanceOf(HTMLButtonElement);
+    expect(trackButton?.getAttribute('title')).toBe('BGM01');
+    expect(slider).toBeInstanceOf(HTMLInputElement);
+    expect(slider?.getAttribute('title')).toBe('BGM音量');
+  });
+
   it('dispatches volume change events for slider interaction and programmatic updates', () => {
     const onVolumeInput = vi.fn();
     const menu = createWorkspaceMenu({ onVolumeInput });

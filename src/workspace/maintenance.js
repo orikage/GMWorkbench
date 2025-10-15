@@ -1,3 +1,5 @@
+import { copyAccessibleLabelToTitle } from './utils.js';
+
 export function createMaintenancePanel({ onClear, onExport, onImport } = {}) {
   const section = document.createElement('section');
   section.className = 'workspace__maintenance';
@@ -59,18 +61,21 @@ export function createMaintenancePanel({ onClear, onExport, onImport } = {}) {
   clearButton.className =
     'workspace__maintenance-button workspace__maintenance-button--clear';
   clearButton.textContent = 'キャッシュを全削除';
+  copyAccessibleLabelToTitle(clearButton, clearButton.textContent);
 
   const exportButton = document.createElement('button');
   exportButton.type = 'button';
   exportButton.className =
     'workspace__maintenance-button workspace__maintenance-button--export';
   exportButton.textContent = 'セッションを書き出す';
+  copyAccessibleLabelToTitle(exportButton, exportButton.textContent);
 
   const importButton = document.createElement('button');
   importButton.type = 'button';
   importButton.className =
     'workspace__maintenance-button workspace__maintenance-button--import';
   importButton.textContent = 'セッションを読み込む';
+  copyAccessibleLabelToTitle(importButton, importButton.textContent);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';

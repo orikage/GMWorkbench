@@ -4,6 +4,7 @@ import {
   WORKSPACE_VOLUME_CHANGE_EVENT,
 } from './constants.js';
 import { createWorkspaceIcon } from './icons.js';
+import { copyAccessibleLabelToTitle } from './utils.js';
 
 const DEFAULT_MENU_ITEMS = [
   { id: 'browser', label: 'PDFブラウザ', icon: 'document' },
@@ -66,6 +67,7 @@ function createMenuButton(item, onActivate) {
   button.dataset.menuId = item.id;
   button.setAttribute('aria-pressed', 'false');
   button.setAttribute('aria-label', item.label);
+  copyAccessibleLabelToTitle(button, item.label);
 
   const icon = createWorkspaceIcon(item.icon, { className: 'workspace__menu-icon' });
   const label = document.createElement('span');
@@ -88,6 +90,7 @@ function createTrackButton(track, onActivate) {
   button.dataset.trackId = track.id;
   button.textContent = track.label;
   button.setAttribute('aria-pressed', 'false');
+  copyAccessibleLabelToTitle(button, track.label);
   button.addEventListener('click', () => {
     onActivate(track.id);
   });
@@ -175,6 +178,7 @@ export function createWorkspaceMenu({
   slider.max = '100';
   slider.setAttribute('aria-labelledby', sliderLabel.id);
   slider.setAttribute('orient', 'vertical');
+  copyAccessibleLabelToTitle(slider, volumeLabel);
 
   let volumeValue = clampVolume(volume);
   slider.value = String(volumeValue);
