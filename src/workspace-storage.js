@@ -263,8 +263,80 @@ function normalizeRotation(value) {
   return normalized;
 }
 
+function sanitizeSerializableValue(value, depth = 0) {
+  if (depth > 8) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const sanitizedArray = value
+      .map((entry) => sanitizeSerializableValue(entry, depth + 1))
+      .filter((entry) => entry !== undefined);
+
+    return sanitizedArray;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value || {});
+    const sanitizedObject = {};
+
+    entries.forEach(([key, entry]) => {
+      if (typeof key !== 'string' || key.length === 0) {
+        return;
+      }
+
+      const sanitizedValue = sanitizeSerializableValue(entry, depth + 1);
+
+      if (sanitizedValue !== undefined) {
+        sanitizedObject[key] = sanitizedValue;
+      }
+    });
+
+    return Object.keys(sanitizedObject).length > 0 ? sanitizedObject : undefined;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return undefined;
+}
+
+function sanitizeLayoutMetadata(layout) {
+  if (!layout || typeof layout !== 'object') {
+    return undefined;
+  }
+
+  const sanitized = sanitizeSerializableValue(layout);
+
+  if (!sanitized || typeof sanitized !== 'object' || Array.isArray(sanitized)) {
+    return undefined;
+  }
+
+  return sanitized;
+}
+
 function normalizeForStorage(state) {
   const normalized = { id: state.id };
+
+  const windowType =
+    typeof state.windowType === 'string' && state.windowType.trim().length > 0
+      ? state.windowType.trim()
+      : 'pdf';
+
+  normalized.windowType = windowType;
 
   if (typeof state.name === 'string' && state.name.length > 0) {
     normalized.name = state.name;
@@ -420,6 +492,12 @@ function normalizeForStorage(state) {
     normalized.data = state.data;
   }
 
+  const layoutMetadata = sanitizeLayoutMetadata(state.layout);
+
+  if (layoutMetadata) {
+    normalized.layout = layoutMetadata;
+  }
+
   return normalized;
 }
 
@@ -509,9 +587,17 @@ function normalizeFromStorage(record) {
         .slice(-MAX_STORED_BOOKMARKS)
     : [];
 
+  const layout = sanitizeLayoutMetadata(record.layout);
+
+  const windowType =
+    typeof record.windowType === 'string' && record.windowType.trim().length > 0
+      ? record.windowType.trim()
+      : 'pdf';
+
   return {
     id: record.id,
     file,
+    windowType,
     name: record.name,
     type: record.type,
     lastModified: record.lastModified,
@@ -539,6 +625,7 @@ function normalizeFromStorage(record) {
     pageHistory: history.length > 0 ? history : undefined,
     pageHistoryIndex: Number.isFinite(historyIndex) ? historyIndex : undefined,
     bookmarks: bookmarks.length > 0 ? bookmarks : undefined,
+    layout,
     persisted: true,
   };
 }

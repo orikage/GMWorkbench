@@ -112,6 +112,85 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     windowElement.tabIndex = 0;
     windowElement.dataset.zoomFitMode = zoomFitMode;
 
+    const windowType =
+      typeof options.windowType === 'string' && options.windowType.trim().length > 0
+        ? options.windowType.trim()
+        : 'pdf';
+    windowElement.dataset.windowType = windowType;
+
+    const clonePlainValue = (value) => {
+      if (Array.isArray(value)) {
+        return value
+          .map((entry) => clonePlainValue(entry))
+          .filter((entry) => entry !== undefined);
+      }
+
+      if (value === null) {
+        return null;
+      }
+
+      if (typeof value === 'object') {
+        const entries = Object.entries(value || {});
+        const clone = {};
+
+        entries.forEach(([key, entry]) => {
+          if (typeof key !== 'string' || key.length === 0) {
+            return;
+          }
+
+          const cloned = clonePlainValue(entry);
+
+          if (cloned !== undefined) {
+            clone[key] = cloned;
+          }
+        });
+
+        return clone;
+      }
+
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : undefined;
+      }
+
+      if (typeof value === 'string' || typeof value === 'boolean') {
+        return value;
+      }
+
+      return undefined;
+    };
+
+    const cloneLayoutMetadata = (value) => {
+      if (!value || typeof value !== 'object') {
+        return {};
+      }
+
+      const cloned = clonePlainValue(value);
+
+      if (!cloned || typeof cloned !== 'object' || Array.isArray(cloned)) {
+        return {};
+      }
+
+      return cloned;
+    };
+
+    const parseNumericValue = (value) => {
+      if (Number.isFinite(value)) {
+        return Math.trunc(value);
+      }
+
+      if (typeof value === 'string' && value.trim().length > 0) {
+        const parsed = Number.parseInt(value, 10);
+
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+
+      return undefined;
+    };
+
+    let baseLayoutMetadata = cloneLayoutMetadata(options.layout);
+
     const offsetIndex = area.children.length;
     const defaultLeft = offsetIndex * WINDOW_STACK_OFFSET;
     const defaultTop = offsetIndex * WINDOW_STACK_OFFSET;
@@ -471,7 +550,49 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         restoreWidth: restoreBounds.width,
         restoreHeight: restoreBounds.height,
         bookmarks: bookmarks.slice(),
+        windowType,
       };
+
+      const computeLayoutMetadata = () => {
+        const metadata = cloneLayoutMetadata(baseLayoutMetadata);
+        metadata.version = 1;
+
+        const bounds = {
+          left: parsePixels(windowElement.style.left, initialLeft),
+          top: parsePixels(windowElement.style.top, initialTop),
+          width: parsePixels(windowElement.style.width, initialWidth),
+          height: parsePixels(windowElement.style.height, initialHeight),
+        };
+
+        const restore = {
+          left: Number.isFinite(restoreBounds.left) ? restoreBounds.left : bounds.left,
+          top: Number.isFinite(restoreBounds.top) ? restoreBounds.top : bounds.top,
+          width: Number.isFinite(restoreBounds.width) ? restoreBounds.width : bounds.width,
+          height: Number.isFinite(restoreBounds.height) ? restoreBounds.height : bounds.height,
+        };
+
+        const zIndexValue = parseNumericValue(windowElement.style.zIndex ?? '');
+
+        if (Number.isFinite(zIndexValue)) {
+          metadata.zIndex = zIndexValue;
+        } else {
+          delete metadata.zIndex;
+        }
+
+        metadata.bounds = bounds;
+        metadata.restoreBounds = restore;
+        metadata.pinned = windowElement.classList.contains('workspace__window--pinned');
+        metadata.maximized = isMaximized === true;
+
+        return metadata;
+      };
+
+      const layoutMetadata = computeLayoutMetadata();
+      baseLayoutMetadata = cloneLayoutMetadata(layoutMetadata);
+
+      if (layoutMetadata && Object.keys(layoutMetadata).length > 0) {
+        descriptor.layout = layoutMetadata;
+      }
 
       if (includeFile) {
         descriptor.file = file;
@@ -2239,9 +2360,13 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       id: windowId,
     });
 
+    const storedZIndex = parseNumericValue(options?.layout?.zIndex);
+
     if (shouldAutoFocus) {
       bringToFront();
       windowElement.focus({ preventScroll: true });
+    } else if (Number.isFinite(storedZIndex)) {
+      assignZIndex(storedZIndex);
     } else {
       assignZIndex();
     }
