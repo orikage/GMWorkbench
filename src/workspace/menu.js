@@ -1,4 +1,8 @@
-import { WORKSPACE_MENU_CHANGE_EVENT } from './constants.js';
+import {
+  WORKSPACE_MENU_CHANGE_EVENT,
+  WORKSPACE_TRACK_CHANGE_EVENT,
+  WORKSPACE_VOLUME_CHANGE_EVENT,
+} from './constants.js';
 import { createWorkspaceIcon } from './icons.js';
 import { copyAccessibleLabelToTitle } from './utils.js';
 
@@ -8,6 +12,54 @@ const DEFAULT_MENU_ITEMS = [
   { id: 'map', label: 'マップビュー', icon: 'map' },
   { id: 'log', label: 'ログ', icon: 'log' },
 ];
+
+const DEFAULT_TRACKS = [
+  { id: 'bgm01', label: 'BGM01' },
+  { id: 'bgm02', label: 'BGM02' },
+  { id: 'bgm03', label: 'BGM03' },
+];
+
+const DEFAULT_VOLUME = 60;
+const DEFAULT_VOLUME_LABEL = 'BGM音量';
+const SLIDER_LABEL_ID = 'workspace-menu-slider-label';
+
+const toFiniteNumber = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const clampVolume = (value, fallback = DEFAULT_VOLUME) => {
+  const numeric = toFiniteNumber(value);
+  const fallbackNumeric = toFiniteNumber(fallback);
+  const base = numeric ?? fallbackNumeric ?? DEFAULT_VOLUME;
+
+  if (base <= 0) {
+    return 0;
+  }
+
+  if (base >= 100) {
+    return 100;
+  }
+
+  return Math.round(base);
+};
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 
@@ -77,6 +129,11 @@ export function createWorkspaceMenu({
   initialActiveId,
   menuItems: providedMenuItems,
   onMenuChange,
+  tracks: providedTracks = DEFAULT_TRACKS,
+  onTrackChange,
+  volume: providedVolume = DEFAULT_VOLUME,
+  volumeLabel: providedVolumeLabel = DEFAULT_VOLUME_LABEL,
+  onVolumeInput,
 } = {}) {
   const navigation = document.createElement('nav');
   navigation.className = 'workspace__menu';
@@ -84,6 +141,10 @@ export function createWorkspaceMenu({
   navigation.setAttribute('aria-label', 'ワークスペース機能メニュー');
 
   const menuItems = sanitizeCollection(providedMenuItems, DEFAULT_MENU_ITEMS);
+  const tracks = sanitizeCollection(providedTracks, DEFAULT_TRACKS);
+  const volumeLabel = isNonEmptyString(providedVolumeLabel)
+    ? providedVolumeLabel
+    : DEFAULT_VOLUME_LABEL;
 
   const list = document.createElement('ul');
   list.className = 'workspace__menu-list';
@@ -148,7 +209,7 @@ export function createWorkspaceMenu({
   slider.setAttribute('orient', 'vertical');
   copyAccessibleLabelToTitle(slider, volumeLabel);
 
-  let volumeValue = clampVolume(volume);
+  let volumeValue = clampVolume(providedVolume);
   slider.value = String(volumeValue);
 
   const notifyVolumeChange = (value) => {
@@ -219,12 +280,12 @@ export function createWorkspaceMenu({
 
   const setTrackActive = (id, { silent = false } = {}) => {
     if (!trackButtons.has(id)) {
-      return;
+      return activeTrackId;
     }
 
     if (activeTrackId === id) {
       updateTrackState(id);
-      return;
+      return activeTrackId;
     }
 
     activeTrackId = id;
@@ -233,6 +294,8 @@ export function createWorkspaceMenu({
     if (!silent) {
       notifyTrackChange(id);
     }
+
+    return activeTrackId;
   };
 
   tracks.forEach((track) => {
@@ -251,9 +314,19 @@ export function createWorkspaceMenu({
     setActive(defaultActive, { silent: true });
   }
 
+  const defaultTrackId = tracks[0]?.id;
+
+  if (defaultTrackId) {
+    setTrackActive(defaultTrackId, { silent: true });
+  }
+
   return {
     element: navigation,
     setActive,
     getActiveId: () => activeId,
+    setTrackActive,
+    getActiveTrackId: () => activeTrackId,
+    setVolume,
+    getVolume: () => volumeValue,
   };
 }

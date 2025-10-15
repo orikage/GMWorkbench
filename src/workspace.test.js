@@ -304,14 +304,30 @@ describe('createWorkspace', () => {
     const workspace = createWorkspace();
 
     expect(workspace.dataset.activeMenu).toBe('browser');
-    expect(workspace.dataset.activeTrack).toBeUndefined();
-    expect(workspace.dataset.menuVolume).toBeUndefined();
+    expect(workspace.dataset.activeTrack).toBe('bgm01');
+    expect(workspace.dataset.menuVolume).toBe('60');
+
+    const slider = workspace.querySelector('.workspace__menu-range');
+    expect(slider).toBeInstanceOf(HTMLInputElement);
+
+    const activeTrack = workspace.querySelector('.workspace__menu-track--active');
+    expect(activeTrack).toBeInstanceOf(HTMLButtonElement);
+    expect(activeTrack?.dataset.trackId).toBe('bgm01');
 
     const mapButton = workspace.querySelector('[data-menu-id="map"]');
     mapButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(workspace.dataset.activeMenu).toBe('map');
-    expect(workspace.querySelector('.workspace__menu-range')).toBeNull();
-    expect(workspace.querySelector('.workspace__menu-track')).toBeNull();
+
+    const secondTrack = workspace.querySelector('[data-track-id="bgm02"]');
+    secondTrack?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(workspace.dataset.activeTrack).toBe('bgm02');
+
+    if (slider instanceof HTMLInputElement) {
+      slider.value = '72';
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    expect(workspace.dataset.menuVolume).toBe('72');
   });
 
   it('shows onboarding guidance when no windows are open and restores it after closing the last window', async () => {
