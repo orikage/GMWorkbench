@@ -3459,6 +3459,9 @@ describe('createWorkspace', () => {
 
     exportButton.click();
 
+    expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+
+    await flushPromises();
     await flushPromises();
 
     expect(storageMocks.exportSnapshot).toHaveBeenCalledTimes(1);
@@ -3467,6 +3470,7 @@ describe('createWorkspace', () => {
       compression: 'gzip',
     });
     expect(createObjectURLSpy).toHaveBeenCalledWith(exportBlob);
+    expect(revokeObjectURLSpy).toHaveBeenCalledTimes(1);
     expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:session');
 
     expect(exportedHandler).toHaveBeenCalledTimes(1);
