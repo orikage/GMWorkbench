@@ -1,8 +1,4 @@
-import {
-  WORKSPACE_MENU_CHANGE_EVENT,
-  WORKSPACE_TRACK_CHANGE_EVENT,
-  WORKSPACE_VOLUME_CHANGE_EVENT,
-} from './constants.js';
+import { WORKSPACE_MENU_CHANGE_EVENT } from './constants.js';
 import { createWorkspaceIcon } from './icons.js';
 import { copyAccessibleLabelToTitle } from './utils.js';
 
@@ -11,18 +7,7 @@ const DEFAULT_MENU_ITEMS = [
   { id: 'npc', label: 'NPCノート', icon: 'profile' },
   { id: 'map', label: 'マップビュー', icon: 'map' },
   { id: 'log', label: 'ログ', icon: 'log' },
-  { id: 'sound', label: 'サウンド', icon: 'sound' },
 ];
-
-const DEFAULT_TRACKS = [
-  { id: 'bgm01', label: 'BGM01' },
-  { id: 'bgm02', label: 'BGM02' },
-];
-
-const DEFAULT_VOLUME = 68;
-const DEFAULT_VOLUME_LABEL = 'BGM音量';
-
-const SLIDER_LABEL_ID = 'workspace-menu-slider-label';
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 
@@ -36,16 +21,6 @@ const sanitizeCollection = (entries, fallback) => {
   );
 
   return sanitized.length > 0 ? sanitized : fallback;
-};
-
-const clampVolume = (value, fallback = DEFAULT_VOLUME) => {
-  const numeric = Number.parseFloat(value);
-
-  if (!Number.isFinite(numeric)) {
-    return fallback;
-  }
-
-  return Math.min(100, Math.max(0, Math.round(numeric)));
 };
 
 const emitMenuEvent = (target, type, detail) => {
@@ -100,14 +75,8 @@ function createTrackButton(track, onActivate) {
 
 export function createWorkspaceMenu({
   initialActiveId,
-  initialTrackId,
   menuItems: providedMenuItems,
-  tracks: providedTracks,
-  volume = DEFAULT_VOLUME,
   onMenuChange,
-  onTrackChange,
-  onVolumeInput,
-  volumeLabel = DEFAULT_VOLUME_LABEL,
 } = {}) {
   const navigation = document.createElement('nav');
   navigation.className = 'workspace__menu';
@@ -115,7 +84,6 @@ export function createWorkspaceMenu({
   navigation.setAttribute('aria-label', 'ワークスペース機能メニュー');
 
   const menuItems = sanitizeCollection(providedMenuItems, DEFAULT_MENU_ITEMS);
-  const tracks = sanitizeCollection(providedTracks, DEFAULT_TRACKS);
 
   const list = document.createElement('ul');
   list.className = 'workspace__menu-list';
@@ -283,21 +251,9 @@ export function createWorkspaceMenu({
     setActive(defaultActive, { silent: true });
   }
 
-  const defaultTrack = trackButtons.has(initialTrackId)
-    ? initialTrackId
-    : tracks[0]?.id ?? null;
-
-  if (defaultTrack) {
-    setTrackActive(defaultTrack, { silent: true });
-  }
-
   return {
     element: navigation,
     setActive,
     getActiveId: () => activeId,
-    setTrackActive,
-    getActiveTrackId: () => activeTrackId,
-    setVolume,
-    getVolume: () => volumeValue,
   };
 }

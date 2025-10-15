@@ -95,6 +95,9 @@ export function createWindowNotes({
       notesContent = typeof nextContent === 'string' ? nextContent : '';
       sync();
     },
+    focusInput() {
+      notesTextarea.focus({ preventScroll: true });
+    },
     sync,
     updateTitle,
   };

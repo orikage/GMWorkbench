@@ -80,6 +80,7 @@ vi.mock('./workspace-storage.js', () => ({
   importWorkspaceSnapshot: storageMocks.importSnapshot,
 }));
 
+import { WORKSPACE_QUICK_MEMO_REQUEST_EVENT } from './workspace/constants.js';
 import { createWorkspace } from './workspace.js';
 
 const originalGetContext = HTMLCanvasElement.prototype.getContext;
@@ -254,14 +255,17 @@ describe('createWorkspace', () => {
     expect(workspace).toBeInstanceOf(HTMLElement);
     expect(workspace.dataset.role).toBe('workspace');
     expect(workspace.dataset.theme).toBe('midnight');
-    expect(workspace.querySelector('.workspace__app-bar')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__stage')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__canvas')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__stage-overlay')).not.toBeNull();
     expect(workspace.querySelector('.workspace__drop-zone')).not.toBeNull();
     expect(workspace.querySelector('.workspace__button')?.textContent).toBe('PDFを開く');
     expect(workspace.querySelector('.workspace__file-input')).not.toBeNull();
     expect(workspace.querySelector('.workspace__onboarding')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__queue')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__quick-panel')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__menu')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__floating--utilities .workspace__queue')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__floating--quick .workspace__quick-panel')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__floating--menu .workspace__menu')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__app-bar')).toBeNull();
   });
 
   it('provides hover titles for the primary workspace actions', async () => {
@@ -300,28 +304,14 @@ describe('createWorkspace', () => {
     const workspace = createWorkspace();
 
     expect(workspace.dataset.activeMenu).toBe('browser');
-    expect(workspace.dataset.activeTrack).toBe('bgm01');
-    expect(workspace.dataset.menuVolume).toBe('68');
+    expect(workspace.dataset.activeTrack).toBeUndefined();
+    expect(workspace.dataset.menuVolume).toBeUndefined();
 
     const mapButton = workspace.querySelector('[data-menu-id="map"]');
     mapButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(workspace.dataset.activeMenu).toBe('map');
-
-    const trackButton = workspace.querySelector('[data-track-id="bgm02"]');
-    trackButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(workspace.dataset.activeTrack).toBe('bgm02');
-
-    const slider = workspace.querySelector('.workspace__menu-range');
-    expect(slider).toBeInstanceOf(HTMLInputElement);
-
-    if (!(slider instanceof HTMLInputElement)) {
-      throw new Error('expected the workspace menu slider to be present');
-    }
-
-    slider.value = '73';
-    slider.dispatchEvent(new Event('input', { bubbles: true }));
-
-    expect(workspace.dataset.menuVolume).toBe('73');
+    expect(workspace.querySelector('.workspace__menu-range')).toBeNull();
+    expect(workspace.querySelector('.workspace__menu-track')).toBeNull();
   });
 
   it('shows onboarding guidance when no windows are open and restores it after closing the last window', async () => {
@@ -359,6 +349,109 @@ describe('createWorkspace', () => {
     expect(storageMocks.loadPreferences).toHaveBeenCalledTimes(1);
     expect(onboarding).toBeInstanceOf(HTMLElement);
     expect(onboarding?.hidden).toBe(true);
+  });
+
+  it('creates memo windows that support focus, movement, and resizing', () => {
+    const workspace = createWorkspace();
+    const area = workspace.querySelector('.workspace__windows');
+
+    expect(area).toBeInstanceOf(HTMLElement);
+
+    if (!(area instanceof HTMLElement)) {
+      throw new Error('memo tests require the workspace canvas element');
+    }
+
+    area.getBoundingClientRect = () => ({
+      width: 1200,
+      height: 800,
+      top: 0,
+      left: 0,
+      right: 1200,
+      bottom: 800,
+    });
+
+    workspace.dispatchEvent(
+      new CustomEvent(WORKSPACE_QUICK_MEMO_REQUEST_EVENT, { bubbles: true }),
+    );
+
+    const firstMemo = workspace.querySelector('.workspace__window--memo');
+
+    expect(firstMemo).toBeInstanceOf(HTMLElement);
+
+    if (!(firstMemo instanceof HTMLElement)) {
+      throw new Error('memo window element should exist after quick memo request');
+    }
+
+    expect(firstMemo.dataset.windowType).toBe('memo');
+
+    const textarea = firstMemo.querySelector('textarea');
+
+    expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
+    expect(firstMemo.classList.contains('workspace__window--active')).toBe(true);
+
+    const header = firstMemo.querySelector('.workspace__window-header');
+
+    expect(header).toBeInstanceOf(HTMLElement);
+
+    if (!(header instanceof HTMLElement)) {
+      throw new Error('memo window header is required for drag tests');
+    }
+
+    const initialLeft = firstMemo.style.left;
+    const initialTop = firstMemo.style.top;
+
+    header.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }),
+    );
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 90, clientY: 70 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 90, clientY: 70 }));
+
+    expect(firstMemo.style.left).not.toBe(initialLeft);
+    expect(firstMemo.style.top).not.toBe(initialTop);
+
+    const resizeHandle = firstMemo.querySelector('.workspace__window-resize');
+
+    expect(resizeHandle).toBeInstanceOf(HTMLElement);
+
+    if (!(resizeHandle instanceof HTMLElement)) {
+      throw new Error('memo window resize handle is required for resizing tests');
+    }
+
+    const startingWidth = Number.parseFloat(firstMemo.style.width);
+    const startingHeight = Number.parseFloat(firstMemo.style.height);
+
+    resizeHandle.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 260, clientY: 220 }),
+    );
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 320, clientY: 280 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 320, clientY: 280 }));
+
+    expect(Number.parseFloat(firstMemo.style.width)).toBeGreaterThan(startingWidth);
+    expect(Number.parseFloat(firstMemo.style.height)).toBeGreaterThan(startingHeight);
+
+    workspace.dispatchEvent(
+      new CustomEvent(WORKSPACE_QUICK_MEMO_REQUEST_EVENT, { bubbles: true }),
+    );
+
+    const memoWindows = workspace.querySelectorAll('.workspace__window--memo');
+
+    expect(memoWindows.length).toBe(2);
+
+    const secondMemo = memoWindows[1];
+
+    expect(secondMemo.classList.contains('workspace__window--active')).toBe(true);
+
+    header.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 20, clientY: 20 }),
+    );
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 20, clientY: 20 }));
+
+    expect(firstMemo.classList.contains('workspace__window--active')).toBe(true);
+    expect(
+      Number.parseInt(firstMemo.style.zIndex || '0', 10) >
+        Number.parseInt(secondMemo.style.zIndex || '0', 10),
+    ).toBe(true);
+
   });
 
   it('opens the sample PDF from onboarding without requiring a manual file', async () => {
@@ -662,6 +755,128 @@ describe('createWorkspace', () => {
     expect(maximizeButton?.getAttribute('aria-label')).toBe('最大ウィンドウ を元のサイズに戻す');
     expect(resizeHandle?.disabled).toBe(true);
     expect(resizeHandle?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('persists window type and layout metadata across reloads', async () => {
+    const fileA = new File(['A'], 'layout-a.pdf', {
+      type: 'application/pdf',
+      lastModified: 111,
+    });
+    const fileB = new File(['B'], 'layout-b.pdf', {
+      type: 'application/pdf',
+      lastModified: 222,
+    });
+
+    storageMocks.load.mockResolvedValue([
+      {
+        id: 'layout-window-a',
+        file: fileA,
+        left: 32,
+        top: 24,
+        width: 460,
+        height: 340,
+        page: 1,
+        zoom: 1,
+        openedAt: 10,
+        lastFocusedAt: 20,
+        persisted: true,
+        windowType: 'pdf',
+        layout: {
+          version: 1,
+          zIndex: 120,
+          bounds: { left: 32, top: 24, width: 460, height: 340 },
+          restoreBounds: { left: 32, top: 24, width: 460, height: 340 },
+          pinned: false,
+          maximized: false,
+        },
+      },
+      {
+        id: 'layout-window-b',
+        file: fileB,
+        left: 280,
+        top: 180,
+        width: 420,
+        height: 320,
+        page: 2,
+        zoom: 1.1,
+        pinned: true,
+        openedAt: 30,
+        lastFocusedAt: 40,
+        persisted: true,
+        windowType: 'pdf',
+        layout: {
+          version: 1,
+          zIndex: 10020,
+          bounds: { left: 280, top: 180, width: 420, height: 320 },
+          restoreBounds: { left: 280, top: 180, width: 420, height: 320 },
+          pinned: true,
+          maximized: false,
+        },
+      },
+    ]);
+
+    const workspace = createWorkspace();
+
+    await flushPromises();
+    await flushPromises();
+
+    const windowA = workspace.querySelector('[data-window-id="layout-window-a"]');
+    const windowB = workspace.querySelector('[data-window-id="layout-window-b"]');
+
+    expect(windowA).toBeInstanceOf(HTMLElement);
+    expect(windowB).toBeInstanceOf(HTMLElement);
+
+    if (!(windowA instanceof HTMLElement) || !(windowB instanceof HTMLElement)) {
+      throw new Error('restored windows are required for the layout test');
+    }
+
+    expect(windowA.dataset.windowType).toBe('pdf');
+    expect(windowB.dataset.windowType).toBe('pdf');
+
+    expect(Number.parseInt(windowA.style.zIndex ?? '', 10)).toBe(120);
+    expect(Number.parseInt(windowB.style.zIndex ?? '', 10)).toBeGreaterThanOrEqual(10020);
+    expect(windowB.classList.contains('workspace__window--pinned')).toBe(true);
+
+    storageMocks.persist.mockClear();
+
+    windowB.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    await flushPromises();
+    await flushPromises();
+
+    expect(storageMocks.persist).toHaveBeenCalled();
+
+    const lastPersist = storageMocks.persist.mock.calls.at(-1);
+
+    if (!lastPersist) {
+      throw new Error('layout persistence call is required');
+    }
+
+    const descriptor = lastPersist[0];
+
+    expect(descriptor?.windowType).toBe('pdf');
+    expect(descriptor?.layout?.version).toBe(1);
+    expect(descriptor?.layout?.pinned).toBe(true);
+    expect(descriptor?.layout?.maximized).toBe(false);
+    expect(descriptor?.layout?.zIndex).toBe(
+      Number.parseInt(windowB.style.zIndex ?? '0', 10),
+    );
+    expect(descriptor?.layout?.bounds).toEqual({
+      left: Number.parseFloat(windowB.style.left ?? '0'),
+      top: Number.parseFloat(windowB.style.top ?? '0'),
+      width: Number.parseFloat(windowB.style.width ?? '0'),
+      height: Number.parseFloat(windowB.style.height ?? '0'),
+    });
+    expect(descriptor?.restoreLeft).toBeCloseTo(280, 6);
+    expect(descriptor?.restoreTop).toBeCloseTo(180, 6);
+    expect(descriptor?.restoreWidth).toBeCloseTo(420, 6);
+    expect(descriptor?.restoreHeight).toBeCloseTo(320, 6);
+    expect(descriptor?.layout?.restoreBounds).toEqual({
+      left: descriptor.restoreLeft,
+      top: descriptor.restoreTop,
+      width: descriptor.restoreWidth,
+      height: descriptor.restoreHeight,
+    });
   });
 
   it('restores stored page history metadata and keeps navigation controls aligned', async () => {

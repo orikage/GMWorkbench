@@ -36,6 +36,7 @@ describe('workspace-storage snapshots', () => {
       {
         id: 'window-1',
         file,
+        windowType: 'pdf',
         left: 100,
         top: 160,
         width: 420,
@@ -55,6 +56,14 @@ describe('workspace-storage snapshots', () => {
         pageHistory: [1, 3, 5],
         pageHistoryIndex: 2,
         bookmarks: [2, 5],
+        layout: {
+          version: 1,
+          zIndex: 120,
+          bounds: { left: 100, top: 160, width: 420, height: 320 },
+          restoreBounds: { left: 100, top: 160, width: 420, height: 320 },
+          pinned: true,
+          maximized: false,
+        },
       },
       { includeFile: true },
     );
@@ -70,6 +79,15 @@ describe('workspace-storage snapshots', () => {
     expect(payload.windows[0].id).toBe('window-1');
     expect(payload.windows[0].data.base64).toMatch(/^[A-Za-z0-9+/]+=*$/);
     expect(payload.windows[0].page).toBe(3);
+    expect(payload.windows[0].windowType).toBe('pdf');
+    expect(payload.windows[0].layout).toMatchObject({
+      version: 1,
+      zIndex: 120,
+      bounds: { left: 100, top: 160, width: 420, height: 320 },
+      restoreBounds: { left: 100, top: 160, width: 420, height: 320 },
+      pinned: true,
+      maximized: false,
+    });
   });
 
   it('imports a snapshot and recreates window descriptors with files', async () => {
@@ -81,6 +99,7 @@ describe('workspace-storage snapshots', () => {
       windows: [
         {
           id: 'window-2',
+          windowType: 'pdf',
           data: {
             base64: base64Data,
             type: 'application/pdf',
@@ -91,6 +110,14 @@ describe('workspace-storage snapshots', () => {
           zoom: 1.2,
           color: 'amber',
           bookmarks: [1, 4],
+          layout: {
+            version: 1,
+            zIndex: 360,
+            bounds: { left: 24, top: 32, width: 420, height: 320 },
+            restoreBounds: { left: 24, top: 32, width: 420, height: 320 },
+            pinned: false,
+            maximized: false,
+          },
         },
       ],
     });
@@ -106,6 +133,15 @@ describe('workspace-storage snapshots', () => {
     expect(result.windows[0].id).toBe('window-2');
     expect(result.windows[0].page).toBe(4);
     expect(result.windows[0].file?.name).toBe('restore.pdf');
+    expect(result.windows[0].windowType).toBe('pdf');
+    expect(result.windows[0].layout).toMatchObject({
+      version: 1,
+      zIndex: 360,
+      bounds: { left: 24, top: 32, width: 420, height: 320 },
+      restoreBounds: { left: 24, top: 32, width: 420, height: 320 },
+      pinned: false,
+      maximized: false,
+    });
   });
 
   it('throws when provided snapshot JSON is invalid', async () => {
