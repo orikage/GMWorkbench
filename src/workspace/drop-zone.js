@@ -1,4 +1,5 @@
 import { DROP_ACTIVE_CLASS, FILE_INPUT_ID } from './constants.js';
+import { copyAccessibleLabelToTitle } from './utils.js';
 
 function createFileInput(handleFiles) {
   const input = document.createElement('input');
@@ -30,6 +31,7 @@ export function createDropZone() {
   action.className = 'workspace__button';
   action.textContent = 'PDFを開く';
   action.setAttribute('aria-controls', FILE_INPUT_ID);
+  copyAccessibleLabelToTitle(action, action.textContent);
 
   const handleFiles = (fileList) => {
     if (!fileList || fileList.length === 0) {

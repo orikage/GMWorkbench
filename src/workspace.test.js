@@ -268,6 +268,38 @@ describe('createWorkspace', () => {
     expect(workspace.querySelector('.workspace__app-bar')).toBeNull();
   });
 
+  it('provides hover titles for the primary workspace actions', async () => {
+    const workspace = createWorkspace();
+
+    const dropZoneButton = workspace.querySelector('.workspace__button');
+    expect(dropZoneButton).toBeInstanceOf(HTMLButtonElement);
+    expect(dropZoneButton?.getAttribute('title')).toBe('PDFを開く');
+
+    const maintenanceButtons = workspace.querySelectorAll('.workspace__maintenance-button');
+    expect(maintenanceButtons.length).toBeGreaterThan(0);
+    maintenanceButtons.forEach((element) => {
+      expect(element).toBeInstanceOf(HTMLButtonElement);
+      expect(element.getAttribute('title')).toBe(element.textContent);
+    });
+
+    const files = [new File(['dummy'], 'queued.pdf', { type: 'application/pdf' })];
+    workspace.dispatchEvent(
+      new CustomEvent('workspace:file-selected', {
+        detail: { files },
+      }),
+    );
+
+    await flushPromises();
+
+    const queueOpen = workspace.querySelector('.workspace__queue-open');
+    const queueRemove = workspace.querySelector('.workspace__queue-remove');
+
+    expect(queueOpen).toBeInstanceOf(HTMLButtonElement);
+    expect(queueOpen?.getAttribute('title')).toBe('ワークスペースに置く');
+    expect(queueRemove).toBeInstanceOf(HTMLButtonElement);
+    expect(queueRemove?.getAttribute('title')).toBe('取り消す');
+  });
+
   it('exposes workspace menu state through data attributes', () => {
     const workspace = createWorkspace();
 

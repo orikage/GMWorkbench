@@ -1,5 +1,6 @@
 import { WORKSPACE_MENU_CHANGE_EVENT } from './constants.js';
 import { createWorkspaceIcon } from './icons.js';
+import { copyAccessibleLabelToTitle } from './utils.js';
 
 const DEFAULT_MENU_ITEMS = [
   { id: 'browser', label: 'PDFブラウザ', icon: 'document' },
@@ -41,6 +42,7 @@ function createMenuButton(item, onActivate) {
   button.dataset.menuId = item.id;
   button.setAttribute('aria-pressed', 'false');
   button.setAttribute('aria-label', item.label);
+  copyAccessibleLabelToTitle(button, item.label);
 
   const icon = createWorkspaceIcon(item.icon, { className: 'workspace__menu-icon' });
   const label = document.createElement('span');
@@ -54,6 +56,21 @@ function createMenuButton(item, onActivate) {
 
   li.append(button);
   return { element: li, button };
+}
+
+function createTrackButton(track, onActivate) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'workspace__control workspace__menu-track';
+  button.dataset.trackId = track.id;
+  button.textContent = track.label;
+  button.setAttribute('aria-pressed', 'false');
+  copyAccessibleLabelToTitle(button, track.label);
+  button.addEventListener('click', () => {
+    onActivate(track.id);
+  });
+
+  return button;
 }
 
 export function createWorkspaceMenu({
@@ -114,7 +131,117 @@ export function createWorkspaceMenu({
     buttons.set(item.id, button);
   });
 
-  navigation.append(list);
+  const sliderGroup = document.createElement('div');
+  sliderGroup.className = 'workspace__menu-slider';
+
+  const sliderLabel = document.createElement('span');
+  sliderLabel.className = 'workspace__sr-only';
+  sliderLabel.id = SLIDER_LABEL_ID;
+  sliderLabel.textContent = volumeLabel;
+
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.className = 'workspace__menu-range';
+  slider.min = '0';
+  slider.max = '100';
+  slider.setAttribute('aria-labelledby', sliderLabel.id);
+  slider.setAttribute('orient', 'vertical');
+  copyAccessibleLabelToTitle(slider, volumeLabel);
+
+  let volumeValue = clampVolume(volume);
+  slider.value = String(volumeValue);
+
+  const notifyVolumeChange = (value) => {
+    if (typeof onVolumeInput === 'function') {
+      onVolumeInput(value);
+    }
+
+    emitMenuEvent(navigation, WORKSPACE_VOLUME_CHANGE_EVENT, { value });
+  };
+
+  const setVolume = (value, { silent = false } = {}) => {
+    const nextValue = clampVolume(value, volumeValue);
+
+    if (nextValue === volumeValue) {
+      slider.value = String(nextValue);
+      return nextValue;
+    }
+
+    volumeValue = nextValue;
+    slider.value = String(nextValue);
+
+    if (!silent) {
+      notifyVolumeChange(nextValue);
+    }
+
+    return nextValue;
+  };
+
+  const handleSliderInput = () => {
+    const nextValue = clampVolume(slider.value, volumeValue);
+
+    if (nextValue === volumeValue) {
+      slider.value = String(nextValue);
+      return;
+    }
+
+    volumeValue = nextValue;
+    slider.value = String(nextValue);
+    notifyVolumeChange(nextValue);
+  };
+
+  slider.addEventListener('input', handleSliderInput);
+  slider.addEventListener('change', handleSliderInput);
+
+  sliderGroup.append(sliderLabel, slider);
+
+  const playback = document.createElement('div');
+  playback.className = 'workspace__menu-playback';
+
+  const trackButtons = new Map();
+  let activeTrackId = null;
+
+  const notifyTrackChange = (id) => {
+    if (typeof onTrackChange === 'function') {
+      onTrackChange(id);
+    }
+
+    emitMenuEvent(navigation, WORKSPACE_TRACK_CHANGE_EVENT, { id });
+  };
+
+  const updateTrackState = (id) => {
+    trackButtons.forEach((button, trackId) => {
+      const isActive = trackId === id;
+      button.classList.toggle('workspace__menu-track--active', isActive);
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  };
+
+  const setTrackActive = (id, { silent = false } = {}) => {
+    if (!trackButtons.has(id)) {
+      return;
+    }
+
+    if (activeTrackId === id) {
+      updateTrackState(id);
+      return;
+    }
+
+    activeTrackId = id;
+    updateTrackState(id);
+
+    if (!silent) {
+      notifyTrackChange(id);
+    }
+  };
+
+  tracks.forEach((track) => {
+    const button = createTrackButton(track, (id) => setTrackActive(id));
+    playback.append(button);
+    trackButtons.set(track.id, button);
+  });
+
+  navigation.append(list, sliderGroup, playback);
 
   const defaultActive = buttons.has(initialActiveId)
     ? initialActiveId

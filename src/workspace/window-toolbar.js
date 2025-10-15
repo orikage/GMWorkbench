@@ -5,6 +5,7 @@ import {
   MIN_WINDOW_ZOOM,
   WINDOW_ZOOM_STEP,
 } from './constants.js';
+import { copyAccessibleLabelToTitle } from './utils.js';
 
 const approxEqual = (a, b, tolerance = 0.01) => Math.abs(a - b) < tolerance;
 
@@ -134,6 +135,7 @@ export function createWindowToolbar({
   pageSlider.step = '1';
   pageSlider.value = '1';
   pageSlider.setAttribute('aria-label', 'ページスライダー');
+  copyAccessibleLabelToTitle(pageSlider, 'ページスライダー');
   pageSlider.addEventListener('focus', () => {
     focusWindow();
   });
@@ -344,41 +346,55 @@ export function createWindowToolbar({
     windowElement.dataset.rotation = String(currentRotation);
   };
 
+  const setControlLabel = (element, label) => {
+    if (!(element instanceof Element)) {
+      return;
+    }
+
+    if (typeof label === 'string' && label.length > 0) {
+      element.setAttribute('aria-label', label);
+    } else {
+      element.removeAttribute('aria-label');
+    }
+
+    copyAccessibleLabelToTitle(element, label);
+  };
+
   const updateLabels = (windowTitle) => {
     if (windowTitle) {
-      pageForm.setAttribute('aria-label', `${windowTitle} の表示ページを設定`);
-      pageInput.setAttribute('aria-label', `${windowTitle} の表示ページ番号`);
-      historyBackButton.setAttribute('aria-label', `${windowTitle} のページ履歴を戻る`);
-      historyForwardButton.setAttribute('aria-label', `${windowTitle} のページ履歴を進む`);
-      firstPageButton.setAttribute('aria-label', `${windowTitle} の最初のページへ移動`);
-      prevButton.setAttribute('aria-label', `${windowTitle} の前のページへ移動`);
-      nextButton.setAttribute('aria-label', `${windowTitle} の次のページへ移動`);
-      lastPageButton.setAttribute('aria-label', `${windowTitle} の最後のページへ移動`);
-      zoomOutButton.setAttribute('aria-label', `${windowTitle} を縮小表示`);
-      zoomInButton.setAttribute('aria-label', `${windowTitle} を拡大表示`);
-      zoomResetButton.setAttribute('aria-label', `${windowTitle} の表示倍率をリセット`);
-      zoomFitWidthButton.setAttribute('aria-label', `${windowTitle} を幅に合わせて表示`);
-      zoomFitPageButton.setAttribute('aria-label', `${windowTitle} を全体が収まるよう表示`);
-      rotateLeftButton.setAttribute('aria-label', `${windowTitle} を反時計回りに回転`);
-      rotateRightButton.setAttribute('aria-label', `${windowTitle} を時計回りに回転`);
-      rotateResetButton.setAttribute('aria-label', `${windowTitle} の回転をリセット`);
+      setControlLabel(pageForm, `${windowTitle} の表示ページを設定`);
+      setControlLabel(pageInput, `${windowTitle} の表示ページ番号`);
+      setControlLabel(historyBackButton, `${windowTitle} のページ履歴を戻る`);
+      setControlLabel(historyForwardButton, `${windowTitle} のページ履歴を進む`);
+      setControlLabel(firstPageButton, `${windowTitle} の最初のページへ移動`);
+      setControlLabel(prevButton, `${windowTitle} の前のページへ移動`);
+      setControlLabel(nextButton, `${windowTitle} の次のページへ移動`);
+      setControlLabel(lastPageButton, `${windowTitle} の最後のページへ移動`);
+      setControlLabel(zoomOutButton, `${windowTitle} を縮小表示`);
+      setControlLabel(zoomInButton, `${windowTitle} を拡大表示`);
+      setControlLabel(zoomResetButton, `${windowTitle} の表示倍率をリセット`);
+      setControlLabel(zoomFitWidthButton, `${windowTitle} を幅に合わせて表示`);
+      setControlLabel(zoomFitPageButton, `${windowTitle} を全体が収まるよう表示`);
+      setControlLabel(rotateLeftButton, `${windowTitle} を反時計回りに回転`);
+      setControlLabel(rotateRightButton, `${windowTitle} を時計回りに回転`);
+      setControlLabel(rotateResetButton, `${windowTitle} の回転をリセット`);
     } else {
-      pageForm.removeAttribute('aria-label');
-      pageInput.removeAttribute('aria-label');
-      historyBackButton.removeAttribute('aria-label');
-      historyForwardButton.removeAttribute('aria-label');
-      firstPageButton.removeAttribute('aria-label');
-      prevButton.removeAttribute('aria-label');
-      nextButton.removeAttribute('aria-label');
-      lastPageButton.removeAttribute('aria-label');
-      zoomOutButton.removeAttribute('aria-label');
-      zoomInButton.removeAttribute('aria-label');
-      zoomResetButton.removeAttribute('aria-label');
-      zoomFitWidthButton.removeAttribute('aria-label');
-      zoomFitPageButton.removeAttribute('aria-label');
-      rotateLeftButton.removeAttribute('aria-label');
-      rotateRightButton.removeAttribute('aria-label');
-      rotateResetButton.removeAttribute('aria-label');
+      setControlLabel(pageForm, '');
+      setControlLabel(pageInput, '');
+      setControlLabel(historyBackButton, '');
+      setControlLabel(historyForwardButton, '');
+      setControlLabel(firstPageButton, '');
+      setControlLabel(prevButton, '');
+      setControlLabel(nextButton, '');
+      setControlLabel(lastPageButton, '');
+      setControlLabel(zoomOutButton, '');
+      setControlLabel(zoomInButton, '');
+      setControlLabel(zoomResetButton, '');
+      setControlLabel(zoomFitWidthButton, '');
+      setControlLabel(zoomFitPageButton, '');
+      setControlLabel(rotateLeftButton, '');
+      setControlLabel(rotateRightButton, '');
+      setControlLabel(rotateResetButton, '');
     }
   };
 

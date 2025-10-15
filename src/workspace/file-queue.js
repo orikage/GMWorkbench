@@ -1,4 +1,5 @@
 import { QUEUE_OPEN_EVENT, QUEUE_REMOVE_EVENT } from './constants.js';
+import { copyAccessibleLabelToTitle } from './utils.js';
 
 function formatFileSize(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) {
@@ -65,6 +66,7 @@ export function createFileQueue() {
       openButton.type = 'button';
       openButton.className = 'workspace__queue-open';
       openButton.textContent = 'ワークスペースに置く';
+      copyAccessibleLabelToTitle(openButton, openButton.textContent);
       openButton.addEventListener('click', () => {
         const request = new CustomEvent(QUEUE_OPEN_EVENT, {
           bubbles: true,
@@ -77,6 +79,7 @@ export function createFileQueue() {
       removeButton.type = 'button';
       removeButton.className = 'workspace__queue-remove';
       removeButton.textContent = '取り消す';
+      copyAccessibleLabelToTitle(removeButton, removeButton.textContent);
       removeButton.addEventListener('click', () => {
         const removal = new CustomEvent(QUEUE_REMOVE_EVENT, {
           bubbles: true,
