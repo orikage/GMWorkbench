@@ -254,21 +254,17 @@ describe('createWorkspace', () => {
     expect(workspace).toBeInstanceOf(HTMLElement);
     expect(workspace.dataset.role).toBe('workspace');
     expect(workspace.dataset.theme).toBe('midnight');
-    expect(workspace.querySelector('.workspace__app-bar')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__stage')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__canvas')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__stage-overlay')).not.toBeNull();
     expect(workspace.querySelector('.workspace__drop-zone')).not.toBeNull();
     expect(workspace.querySelector('.workspace__button')?.textContent).toBe('PDFを開く');
     expect(workspace.querySelector('.workspace__file-input')).not.toBeNull();
     expect(workspace.querySelector('.workspace__onboarding')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__queue')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__quick-panel')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__menu')).not.toBeNull();
-
-    const utilityButtons = Array.from(workspace.querySelectorAll('.workspace__utility-button'));
-    const utilityIds = utilityButtons.map((button) => button.dataset.utilityId);
-
-    expect(utilityButtons).toHaveLength(3);
-    expect(utilityIds).toEqual(expect.arrayContaining(['layers', 'reference', 'settings']));
-    expect(utilityIds).not.toContain('notifications');
+    expect(workspace.querySelector('.workspace__floating--utilities .workspace__queue')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__floating--quick .workspace__quick-panel')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__floating--menu .workspace__menu')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__app-bar')).toBeNull();
   });
 
   it('exposes workspace menu state through data attributes', () => {

@@ -8,7 +8,7 @@ import {
   persistWorkspacePreference,
 } from '../workspace-storage.js';
 import { createWindowCanvas } from './canvas.js';
-import { createHeader, createHint } from './chrome.js';
+import { createHint } from './chrome.js';
 import { createDropZone } from './drop-zone.js';
 import { createFileQueue } from './file-queue.js';
 import { createMaintenancePanel } from './maintenance.js';
@@ -30,7 +30,6 @@ export function createWorkspace() {
   workspace.dataset.role = 'workspace';
   applyWorkspaceTheme(workspace);
 
-  const header = createHeader();
   const quickPanel = createHint();
   const menu = createWorkspaceMenu();
 
@@ -395,23 +394,27 @@ export function createWorkspace() {
     }
   });
 
-  const viewer = document.createElement('section');
-  viewer.className = 'workspace__viewer';
-  viewer.append(canvas.element);
+  const stage = document.createElement('div');
+  stage.className = 'workspace__stage';
+  stage.append(canvas.element);
 
   const overlay = document.createElement('div');
-  overlay.className = 'workspace__viewer-overlay';
+  overlay.className = 'workspace__stage-overlay';
   overlay.append(dropZone, onboarding.element);
-  viewer.append(overlay);
+  stage.append(overlay);
 
-  const body = document.createElement('div');
-  body.className = 'workspace__body';
-  body.append(viewer, menu.element);
+  const floatingMenu = document.createElement('div');
+  floatingMenu.className = 'workspace__floating workspace__floating--menu';
+  floatingMenu.append(menu.element);
 
-  const utilities = document.createElement('aside');
-  utilities.className = 'workspace__side-panel';
-  utilities.append(queue.element, maintenance.element);
+  const floatingUtilities = document.createElement('div');
+  floatingUtilities.className = 'workspace__floating workspace__floating--utilities';
+  floatingUtilities.append(queue.element, maintenance.element);
 
-  workspace.append(header, body, quickPanel, utilities);
+  const floatingQuick = document.createElement('div');
+  floatingQuick.className = 'workspace__floating workspace__floating--quick';
+  floatingQuick.append(quickPanel);
+
+  workspace.append(stage, floatingMenu, floatingUtilities, floatingQuick);
   return workspace;
 }
