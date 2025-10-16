@@ -201,7 +201,9 @@ export function createWorkspace() {
       link.remove();
 
       if (typeof URL.revokeObjectURL === 'function') {
-        URL.revokeObjectURL(url);
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 0);
       }
 
       const detail = {
