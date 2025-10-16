@@ -3487,6 +3487,10 @@ describe('createWorkspace', () => {
     expect(status.hidden).toBe(false);
     expect(status.textContent).toContain('セッションを書き出しました');
     expect(status.classList.contains('workspace__maintenance-status--error')).toBe(false);
+
+    await flushPromises();
+
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:session');
   });
 
   it('shows a warning message when scoped export has no targets', async () => {
