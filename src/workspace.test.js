@@ -3462,6 +3462,7 @@ describe('createWorkspace', () => {
     expect(revokeObjectURLSpy).not.toHaveBeenCalled();
 
     await flushPromises();
+    await flushPromises();
 
     expect(storageMocks.exportSnapshot).toHaveBeenCalledTimes(1);
     expect(storageMocks.exportSnapshot).toHaveBeenCalledWith({
@@ -3469,7 +3470,8 @@ describe('createWorkspace', () => {
       compression: 'gzip',
     });
     expect(createObjectURLSpy).toHaveBeenCalledWith(exportBlob);
-    expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+    expect(revokeObjectURLSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:session');
 
     expect(exportedHandler).toHaveBeenCalledTimes(1);
     const detail = exportedHandler.mock.calls[0][0].detail;
