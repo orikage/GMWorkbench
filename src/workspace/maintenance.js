@@ -59,21 +59,21 @@ export function createMaintenancePanel({ onClear, onExport, onImport } = {}) {
   const clearButton = document.createElement('button');
   clearButton.type = 'button';
   clearButton.className =
-    'workspace__maintenance-button workspace__maintenance-button--clear';
+    'workspace__control workspace__control--surface workspace__maintenance-action workspace__maintenance-action--clear';
   clearButton.textContent = 'キャッシュを全削除';
   copyAccessibleLabelToTitle(clearButton, clearButton.textContent);
 
   const exportButton = document.createElement('button');
   exportButton.type = 'button';
   exportButton.className =
-    'workspace__maintenance-button workspace__maintenance-button--export';
+    'workspace__control workspace__control--accent workspace__maintenance-action workspace__maintenance-action--export';
   exportButton.textContent = 'セッションを書き出す';
   copyAccessibleLabelToTitle(exportButton, exportButton.textContent);
 
   const importButton = document.createElement('button');
   importButton.type = 'button';
   importButton.className =
-    'workspace__maintenance-button workspace__maintenance-button--import';
+    'workspace__control workspace__control--surface workspace__maintenance-action workspace__maintenance-action--import';
   importButton.textContent = 'セッションを読み込む';
   copyAccessibleLabelToTitle(importButton, importButton.textContent);
 

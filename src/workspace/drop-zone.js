@@ -28,7 +28,8 @@ export function createDropZone() {
 
   const action = document.createElement('button');
   action.type = 'button';
-  action.className = 'workspace__button';
+  action.className =
+    'workspace__control workspace__control--accent workspace__drop-zone-button';
   action.textContent = 'PDFを開く';
   action.setAttribute('aria-controls', FILE_INPUT_ID);
   copyAccessibleLabelToTitle(action, action.textContent);
