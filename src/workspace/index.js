@@ -546,7 +546,11 @@ export function createWorkspace() {
 
   const stage = document.createElement('div');
   stage.className = 'workspace__stage';
-  stage.append(canvas.element);
+
+  const layout = document.createElement('div');
+  layout.className = 'workspace__layout';
+  layout.append(canvas.element);
+  stage.append(layout);
 
   stageOverlay = document.createElement('div');
   stageOverlay.className = 'workspace__stage-overlay';
@@ -560,10 +564,7 @@ export function createWorkspace() {
   stageContentFragment.append(stageHint);
 
   stageOverlay.append(stageContentFragment);
-  stage.append(stageOverlay);
-
-  const layout = document.createElement('div');
-  layout.className = 'workspace__layout';
+  canvas.element.append(stageOverlay);
 
   const menuSurface = document.createElement('aside');
   menuSurface.className = 'workspace__menu-surface';
@@ -606,11 +607,11 @@ export function createWorkspace() {
   logNote.textContent = '保存データの書き出し・読み込みとキャッシュ管理を行えます。';
   registerPanel('log', [logNote, maintenance.element]);
 
-  layout.append(stage, menuSurface);
-  workspace.append(header, layout);
+  layout.append(menuSurface);
+  workspace.append(header, stage);
 
   if (layersOverlay?.element instanceof HTMLElement) {
-    workspace.append(layersOverlay.element);
+    stage.append(layersOverlay.element);
   }
 
   syncPanelVisibility();
