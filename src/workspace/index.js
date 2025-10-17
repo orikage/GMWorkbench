@@ -37,7 +37,7 @@ export function createWorkspace() {
   workspace.dataset.role = 'workspace';
   applyWorkspaceTheme(workspace);
 
-  const header = createHeader();
+  const { element: header, main: appBarMain } = createHeader();
   const quickPanel = createHint();
   const menu = createWorkspaceMenu();
   const panels = new Map();
@@ -644,7 +644,7 @@ export function createWorkspace() {
   logNote.textContent = '保存データの書き出し・読み込みとキャッシュ管理を行えます。';
   registerPanel('log', [logNote, maintenance.element]);
 
-  header.append(menuSurface);
+  appBarMain.append(menuSurface);
   workspace.append(header, stage);
 
   if (layersOverlay?.element instanceof HTMLElement) {

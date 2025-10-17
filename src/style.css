@@ -128,6 +128,10 @@ body {
   width: 100%;
 }
 
+.workspace__app-bar-main > * {
+  min-width: 0;
+}
+
 .workspace__layers {
   position: absolute;
   top: clamp(96px, 12vw, 140px);
@@ -375,6 +379,9 @@ body {
   gap: clamp(16px, 2vw, 24px);
   padding-top: clamp(12px, 2vw, 18px);
   border-top: 1px solid var(--workspace-border);
+  flex: 1 1 100%;
+  width: 100%;
+  align-self: stretch;
 }
 
 .workspace__menu-panels {
