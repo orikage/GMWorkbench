@@ -164,6 +164,13 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         : 'pdf';
     windowElement.dataset.windowType = windowType;
 
+    const resizeHandleDefinitions = [
+      { position: 'top-left', horizontal: 'left', vertical: 'top', cursor: 'nwse-resize' },
+      { position: 'top-right', horizontal: 'right', vertical: 'top', cursor: 'nesw-resize' },
+      { position: 'bottom-left', horizontal: 'left', vertical: 'bottom', cursor: 'nesw-resize' },
+      { position: 'bottom-right', horizontal: 'right', vertical: 'bottom', cursor: 'nwse-resize' },
+    ];
+
     const preferredWidth = Number.isFinite(options.restoreWidth)
       ? options.restoreWidth
       : Number.isFinite(options.width)
@@ -287,6 +294,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     const shouldStartMaximized = options.maximized === true;
     let isMaximized = false;
     let dragState = null;
+    let resizeState = null;
 
     const shouldAutoFocus = options.autoFocus !== false;
     let currentPage = Number.isFinite(options.page)
@@ -373,7 +381,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     if (bookmarks.length > MAX_WINDOW_BOOKMARKS) {
       bookmarks = bookmarks.slice(-MAX_WINDOW_BOOKMARKS);
     }
-    let resizeHandle;
+    const resizeHandles = [];
     let maximizeButton;
     const defaultTitle = file.name;
     let windowTitle =
@@ -441,10 +449,10 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         maximizeButton.disabled = false;
       }
 
-      if (resizeHandle) {
-        resizeHandle.disabled = isMaximized;
-        resizeHandle.setAttribute('aria-hidden', isMaximized ? 'true' : 'false');
-      }
+      resizeHandles.forEach((handle) => {
+        handle.disabled = isMaximized;
+        handle.setAttribute('aria-hidden', isMaximized ? 'true' : 'false');
+      });
 
       windowElement.classList.remove('workspace__window--resizing');
     };
@@ -453,6 +461,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       const target = value === true;
 
       if (target !== isMaximized) {
+        finishResizeInteraction({ commit: true });
+
         if (target) {
           layoutState = {
             ...layoutState,
@@ -507,6 +517,166 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       windowElement.dispatchEvent(closure);
     };
 
+    const finishResizeInteraction = ({ commit = false } = {}) => {
+      if (!resizeState) {
+        return;
+      }
+
+      const { handle, pointerId, hasResized } = resizeState;
+
+      if (handle && typeof handle.releasePointerCapture === 'function') {
+        try {
+          handle.releasePointerCapture(pointerId);
+        } catch (error) {
+          // ignore pointer capture release failures
+        }
+      }
+
+      resizeState = null;
+      windowElement.classList.remove('workspace__window--resizing');
+      windowElement.style.removeProperty('--workspace-window-resize-cursor');
+
+      if (commit && hasResized) {
+        if (!isMaximized) {
+          setWindowBounds({}, { updateRestore: true });
+        }
+
+        schedulePersist({ flush: true });
+      }
+    };
+
+    const createResizeHandle = (definition) => {
+      const handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = `workspace__window-resize workspace__window-resize--${definition.position}`;
+      handle.dataset.resizePosition = definition.position;
+      handle.disabled = false;
+      handle.setAttribute('aria-hidden', 'false');
+      handle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
+
+      const handlePointerDown = (event) => {
+        if (typeof event.button === 'number' && event.button > 0) {
+          return;
+        }
+
+        if (handle.disabled || isMaximized) {
+          return;
+        }
+
+        bringToFront();
+        windowElement.focus({ preventScroll: true });
+
+        if (resizeState) {
+          finishResizeInteraction({ commit: false });
+        }
+
+        resizeState = {
+          pointerId: event.pointerId,
+          handle,
+          definition,
+          startX: event.clientX,
+          startY: event.clientY,
+          originLeft: layoutState.left,
+          originTop: layoutState.top,
+          originWidth: layoutState.width,
+          originHeight: layoutState.height,
+          hasResized: false,
+        };
+
+        windowElement.classList.add('workspace__window--resizing');
+        windowElement.style.setProperty('--workspace-window-resize-cursor', definition.cursor);
+
+        if (typeof handle.setPointerCapture === 'function') {
+          try {
+            handle.setPointerCapture(event.pointerId);
+          } catch (error) {
+            // ignore pointer capture failures
+          }
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+      };
+
+      const handlePointerMove = (event) => {
+        if (!resizeState || event.pointerId !== resizeState.pointerId) {
+          return;
+        }
+
+        if (resizeState.handle !== handle) {
+          return;
+        }
+
+        const deltaX = event.clientX - resizeState.startX;
+        const deltaY = event.clientY - resizeState.startY;
+        const nextBounds = {};
+
+        if (definition.horizontal === 'right') {
+          nextBounds.width = resizeState.originWidth + deltaX;
+        } else if (definition.horizontal === 'left') {
+          nextBounds.width = resizeState.originWidth - deltaX;
+          nextBounds.left = resizeState.originLeft + deltaX;
+        }
+
+        if (definition.vertical === 'bottom') {
+          nextBounds.height = resizeState.originHeight + deltaY;
+        } else if (definition.vertical === 'top') {
+          nextBounds.height = resizeState.originHeight - deltaY;
+          nextBounds.top = resizeState.originTop + deltaY;
+        }
+
+        const before = getWindowBounds();
+        const after = setWindowBounds(nextBounds);
+
+        if (
+          after.left !== before.left ||
+          after.top !== before.top ||
+          after.width !== before.width ||
+          after.height !== before.height
+        ) {
+          resizeState.hasResized = true;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+      };
+
+      const handlePointerUp = (event) => {
+        if (!resizeState || event.pointerId !== resizeState.pointerId) {
+          return;
+        }
+
+        if (resizeState.handle !== handle) {
+          return;
+        }
+
+        finishResizeInteraction({ commit: true });
+        event.preventDefault();
+        event.stopPropagation();
+      };
+
+      const handlePointerCancel = () => {
+        finishResizeInteraction({ commit: false });
+      };
+
+      handle.addEventListener('pointerdown', handlePointerDown);
+      handle.addEventListener('pointermove', handlePointerMove);
+      handle.addEventListener('pointerup', handlePointerUp);
+      handle.addEventListener('pointercancel', handlePointerCancel);
+      handle.addEventListener('lostpointercapture', handlePointerCancel);
+
+      handle.addEventListener('focus', () => {
+        bringToFront({ persistFocus: false });
+      });
+
+      handle.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+
+      return handle;
+    };
+
     const disposeWindow = ({ persistRemoval = true, emitClose = true } = {}) => {
       if (disposed) {
         return;
@@ -516,6 +686,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       searchController?.cancel();
       finishPointerDrag();
+      finishResizeInteraction({ commit: false });
 
       if (emitClose) {
         dispatchCloseEvent();
@@ -612,8 +783,12 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
     };
 
-    const schedulePersist = ({ includeFile = false } = {}) => {
-      const shouldIncludeFile = includeFile || !hasStoredFile;
+    let persistTaskScheduled = false;
+    let pendingPersistIncludeFile = false;
+
+    const executePersist = () => {
+      const shouldIncludeFile = pendingPersistIncludeFile || !hasStoredFile;
+      pendingPersistIncludeFile = false;
 
       persistState({ includeFile: shouldIncludeFile })
         .then(() => {
@@ -622,6 +797,36 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
           }
         })
         .catch(() => {});
+    };
+
+    const schedulePersist = ({ includeFile = false, flush = false } = {}) => {
+      if (includeFile) {
+        pendingPersistIncludeFile = true;
+      }
+
+      if (flush) {
+        if (persistTaskScheduled) {
+          persistTaskScheduled = false;
+        }
+
+        executePersist();
+        return;
+      }
+
+      if (persistTaskScheduled) {
+        return;
+      }
+
+      persistTaskScheduled = true;
+
+      queueMicrotask(() => {
+        if (!persistTaskScheduled) {
+          return;
+        }
+
+        persistTaskScheduled = false;
+        executePersist();
+      });
     };
 
     syncFocusMetadata();
@@ -1726,9 +1931,9 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         maximizeButton.setAttribute('aria-label', label);
       }
 
-      if (resizeHandle) {
-        resizeHandle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
-      }
+      resizeHandles.forEach((handle) => {
+        handle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
+      });
 
       if (bookmarkAddButton) {
         syncBookmarkControls();
@@ -2086,6 +2291,12 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       });
 
     windowElement.append(header, body);
+
+    resizeHandleDefinitions.forEach((definition) => {
+      const handle = createResizeHandle(definition);
+      resizeHandles.push(handle);
+      windowElement.append(handle);
+    });
 
     const shouldIgnorePointerInteraction = (event) => {
       if (editingTitle) {
