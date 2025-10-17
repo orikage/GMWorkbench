@@ -13,6 +13,7 @@ import {
   DEFAULT_WINDOW_ZOOM,
   MAX_WINDOW_BOOKMARKS,
   MAX_WINDOW_ZOOM,
+  MIN_WINDOW_WIDTH,
   MIN_WINDOW_ZOOM,
   PAGE_HISTORY_LIMIT,
   ROTATION_STEP,
@@ -221,6 +222,13 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         : bounds.height,
     };
 
+    const syncHeaderCompactState = () => {
+      const isCompact = layoutState.width < MIN_WINDOW_WIDTH;
+
+      windowElement.classList.toggle('workspace__window--compact-header', isCompact);
+      windowElement.dataset.windowCompactHeader = isCompact ? 'true' : 'false';
+    };
+
     const applyLayoutState = () => {
       windowElement.style.left = `${layoutState.left}px`;
       windowElement.style.top = `${layoutState.top}px`;
@@ -230,6 +238,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       windowElement.dataset.windowTop = String(layoutState.top);
       windowElement.dataset.windowWidth = String(layoutState.width);
       windowElement.dataset.windowHeight = String(layoutState.height);
+      syncHeaderCompactState();
     };
 
     applyLayoutState();

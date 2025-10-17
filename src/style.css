@@ -1127,6 +1127,20 @@ body {
   gap: 8px;
 }
 
+.workspace__window--compact-header .workspace__window-controls {
+  gap: 0;
+}
+
+.workspace__window--compact-header .workspace__window-controls button:not(.workspace__window-maximize) {
+  display: none;
+}
+
+.workspace__window--compact-header .workspace__window-controls .workspace__window-maximize {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .workspace__window-controls button {
   padding: 6px 12px;
   border-radius: var(--workspace-corner-radius);
