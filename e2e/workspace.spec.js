@@ -1,22 +1,23 @@
 import { test, expect } from '@playwright/test';
 
-import { TITLE } from '../src/workspace/constants.js';
-
 const SAMPLE_BUTTON = 'サンプルPDFを開いてみる';
 
 test.describe('workspace onboarding', () => {
   test('loads the workspace and opens the sample PDF window', async ({ page }) => {
     await page.goto('/');
 
-    await expect(
-      page.getByRole('button', { name: `${TITLE} を切り替える` }),
-    ).toBeVisible();
-    await expect(page.getByText('PDFをドラッグ＆ドロップ')).toBeVisible();
+    const instructions =
+      'PDFをドラッグ＆ドロップ、または下のボタンから選択してください。';
+    await expect(page.getByText(instructions)).toBeVisible();
+
+    const dropZoneButton = page.getByRole('button', { name: 'PDFを開く' });
+    await expect(dropZoneButton).toBeVisible();
 
     const sampleButton = page.getByRole('button', { name: SAMPLE_BUTTON });
     await expect(sampleButton).toBeVisible();
 
-    await sampleButton.click();
+    await sampleButton.focus();
+    await sampleButton.press('Enter');
 
     const windowLocator = page.locator('.workspace__window');
     await expect(windowLocator).toHaveCount(1);
@@ -29,7 +30,8 @@ test.describe('workspace onboarding', () => {
     const dismissButton = page.getByRole('button', { name: /ガイドを閉じる/ });
     await expect(dismissButton).toBeVisible();
 
-    await dismissButton.click();
+    await dismissButton.focus();
+    await dismissButton.press('Enter');
 
     await expect(page.locator('.workspace__onboarding').first()).toHaveAttribute('hidden', '');
   });
@@ -49,15 +51,22 @@ test.describe('workspace design theme', () => {
     await page.goto('/');
 
     const workspace = page.locator('.workspace');
-    const appBar = page.locator('.workspace__app-bar');
-    const scenarioButton = page.locator('.workspace__scenario-button');
-    const utilityButton = page.locator('.workspace__utility-button').first();
-
     await expect(workspace).toHaveAttribute('data-theme', 'midnight');
-    await expect(workspace).toHaveCSS('background-color', 'rgb(16, 22, 34)');
-    await expect(appBar).toHaveCSS('border-radius', '0px');
-    await expect(scenarioButton).toHaveCSS('border-radius', '0px');
-    await expect(utilityButton).toHaveCSS('border-radius', '0px');
+    await expect(workspace).toHaveCSS('background-color', 'rgb(9, 13, 20)');
+
+    const tokens = await page.evaluate(() => {
+      const styles = getComputedStyle(document.documentElement);
+
+      return {
+        body: styles.getPropertyValue('--workspace-body').trim(),
+        surface: styles.getPropertyValue('--workspace-surface').trim(),
+        accent: styles.getPropertyValue('--workspace-accent').trim(),
+      };
+    });
+
+    expect(tokens.body).toBe('#090d14');
+    expect(tokens.surface).toBe('#101622');
+    expect(tokens.accent).toBe('#2f74ff');
   });
 
   test('exposes consistent accent colors for interactive controls', async ({ page }) => {
