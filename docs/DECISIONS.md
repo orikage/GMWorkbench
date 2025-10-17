@@ -9,6 +9,7 @@
 4. 一覧はディレクトリを参照するか、`pnpm run docs:print:decisions` などの補助スクリプトで取得します。
 
 ## 既存エントリ
+- [2025-10-17: pnpm ワークスペース設定に `packages` を定義する](decisions/2025-10-17-pnpm-workspace-packages.md)
 - [2025-10-12: タスク Issue 同期ワークフローを常設する判断](decisions/2025-10-12-task-issue-workflow.md)
 - [2025-10-12: タスク表から Issue を起こす運用](decisions/2025-10-12-task-issue-sync.md)
 - [2025-10-12: ワークスペースをモジュール化する方針](decisions/2025-10-12-workspace-modules.md)
