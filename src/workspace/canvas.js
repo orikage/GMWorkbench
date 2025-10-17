@@ -13,8 +13,6 @@ import {
   DEFAULT_WINDOW_ZOOM,
   MAX_WINDOW_BOOKMARKS,
   MAX_WINDOW_ZOOM,
-  MIN_WINDOW_HEIGHT,
-  MIN_WINDOW_WIDTH,
   MIN_WINDOW_ZOOM,
   PAGE_HISTORY_LIMIT,
   ROTATION_STEP,
@@ -30,7 +28,6 @@ import {
   WINDOW_PAGE_CHANGE_EVENT,
   WINDOW_PIN_TOGGLE_EVENT,
   WINDOW_ROTATION_CHANGE_EVENT,
-  WINDOW_STACK_OFFSET,
   WINDOW_TITLE_CHANGE_EVENT,
   WINDOW_ZOOM_CHANGE_EVENT,
   WINDOW_ZOOM_STEP,
@@ -80,8 +77,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     return `${sanitized}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   };
 
-  let zIndexCounter = 1;
-  let pinnedZIndexCounter = 10000;
 
   const parsePixels = (value, fallback) => {
     const numeric = Number.parseFloat(value);
@@ -118,95 +113,10 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         : 'pdf';
     windowElement.dataset.windowType = windowType;
 
-    const clonePlainValue = (value) => {
-      if (Array.isArray(value)) {
-        return value
-          .map((entry) => clonePlainValue(entry))
-          .filter((entry) => entry !== undefined);
-      }
-
-      if (value === null) {
-        return null;
-      }
-
-      if (typeof value === 'object') {
-        const entries = Object.entries(value || {});
-        const clone = {};
-
-        entries.forEach(([key, entry]) => {
-          if (typeof key !== 'string' || key.length === 0) {
-            return;
-          }
-
-          const cloned = clonePlainValue(entry);
-
-          if (cloned !== undefined) {
-            clone[key] = cloned;
-          }
-        });
-
-        return clone;
-      }
-
-      if (typeof value === 'number') {
-        return Number.isFinite(value) ? value : undefined;
-      }
-
-      if (typeof value === 'string' || typeof value === 'boolean') {
-        return value;
-      }
-
-      return undefined;
-    };
-
-    const cloneLayoutMetadata = (value) => {
-      if (!value || typeof value !== 'object') {
-        return {};
-      }
-
-      const cloned = clonePlainValue(value);
-
-      if (!cloned || typeof cloned !== 'object' || Array.isArray(cloned)) {
-        return {};
-      }
-
-      return cloned;
-    };
-
-    const parseNumericValue = (value) => {
-      if (Number.isFinite(value)) {
-        return Math.trunc(value);
-      }
-
-      if (typeof value === 'string' && value.trim().length > 0) {
-        const parsed = Number.parseInt(value, 10);
-
-        if (Number.isFinite(parsed)) {
-          return parsed;
-        }
-      }
-
-      return undefined;
-    };
-
-    let baseLayoutMetadata = cloneLayoutMetadata(options.layout);
-
-    const offsetIndex = area.children.length;
-    const defaultLeft = offsetIndex * WINDOW_STACK_OFFSET;
-    const defaultTop = offsetIndex * WINDOW_STACK_OFFSET;
-    const initialLeft = Number.isFinite(options.left) ? options.left : defaultLeft;
-    const initialTop = Number.isFinite(options.top) ? options.top : defaultTop;
-    const initialWidth = Number.isFinite(options.width)
-      ? options.width
-      : DEFAULT_WINDOW_WIDTH;
-    const initialHeight = Number.isFinite(options.height)
-      ? options.height
-      : DEFAULT_WINDOW_HEIGHT;
-
-    windowElement.style.left = `${initialLeft}px`;
-    windowElement.style.top = `${initialTop}px`;
-    windowElement.style.width = `${initialWidth}px`;
-    windowElement.style.height = `${initialHeight}px`;
+    const initialLeft = 0;
+    const initialTop = 0;
+    const initialWidth = Number.isFinite(options.width) ? options.width : DEFAULT_WINDOW_WIDTH;
+    const initialHeight = Number.isFinite(options.height) ? options.height : DEFAULT_WINDOW_HEIGHT;
 
     const windowId =
       typeof options.id === 'string' && options.id.length > 0
@@ -302,15 +212,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     }
     let resizeHandle;
     let maximizeButton;
-    let isMaximized = options.maximized === true;
-    const sanitizeBoundValue = (value, fallback) =>
-      Number.isFinite(value) ? value : fallback;
-    let restoreBounds = {
-      left: sanitizeBoundValue(options.restoreLeft, initialLeft),
-      top: sanitizeBoundValue(options.restoreTop, initialTop),
-      width: sanitizeBoundValue(options.restoreWidth, initialWidth),
-      height: sanitizeBoundValue(options.restoreHeight, initialHeight),
-    };
+    let isMaximized = true;
     const defaultTitle = file.name;
     let windowTitle =
       typeof options.title === 'string' && options.title.trim().length > 0
@@ -355,15 +257,9 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         bubbles: true,
         detail: {
           file,
-          maximized: isMaximized,
-          left: bounds.left,
-          top: bounds.top,
+          maximized: true,
           width: bounds.width,
           height: bounds.height,
-          restoreLeft: restoreBounds.left,
-          restoreTop: restoreBounds.top,
-          restoreWidth: restoreBounds.width,
-          restoreHeight: restoreBounds.height,
         },
       });
 
@@ -375,45 +271,28 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         return;
       }
 
-      maximizeButton.textContent = isMaximized ? '縮小' : '最大化';
-      maximizeButton.setAttribute('aria-pressed', isMaximized ? 'true' : 'false');
+      maximizeButton.textContent = '最大化済み';
+      maximizeButton.setAttribute('aria-pressed', 'true');
+      maximizeButton.disabled = true;
+      maximizeButton.hidden = true;
     };
 
     const syncMaximizeState = () => {
+      isMaximized = true;
+      windowElement.classList.add('workspace__window--maximized');
+      windowElement.dataset.windowMaximized = 'true';
       syncMaximizeControl();
-      windowElement.classList.toggle('workspace__window--maximized', isMaximized);
-      windowElement.dataset.windowMaximized = isMaximized ? 'true' : 'false';
 
       if (resizeHandle) {
-        resizeHandle.disabled = isMaximized;
-        resizeHandle.setAttribute('aria-hidden', isMaximized ? 'true' : 'false');
+        resizeHandle.disabled = true;
+        resizeHandle.setAttribute('aria-hidden', 'true');
       }
 
-      if (isMaximized) {
-        windowElement.classList.remove('workspace__window--resizing');
-      }
+      windowElement.classList.remove('workspace__window--resizing');
     };
 
     const toggleMaximize = () => {
       bringToFront();
-
-      if (isMaximized) {
-        isMaximized = false;
-        const clamped = clampBounds(restoreBounds);
-        restoreBounds = clamped;
-        applyBounds(clamped);
-        syncMaximizeState();
-        syncControlLabels();
-        refreshRestoreBounds();
-        emitMaximizeChange();
-        schedulePersist();
-        return;
-      }
-
-      refreshRestoreBounds();
-      const { width: areaWidth, height: areaHeight } = getAreaSize();
-      isMaximized = true;
-      applyBounds({ left: 0, top: 0, width: areaWidth, height: areaHeight });
       syncMaximizeState();
       syncControlLabels();
       emitMaximizeChange();
@@ -452,8 +331,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       syncEmptyState();
 
       if (windowRegistry.size === 0) {
-        zIndexCounter = 1;
-        pinnedZIndexCounter = 10000;
+        delete area.dataset.activeWindowId;
       }
 
       if (persistRemoval) {
@@ -461,77 +339,38 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
     };
 
-    const getWindowBounds = () => ({
-      left: parsePixels(windowElement.style.left, initialLeft),
-      top: parsePixels(windowElement.style.top, initialTop),
-      width: parsePixels(windowElement.style.width, initialWidth),
-      height: parsePixels(windowElement.style.height, initialHeight),
-    });
+    const getWindowBounds = () => {
+      const rect = windowElement.getBoundingClientRect();
+      const width =
+        rect.width ||
+        windowElement.clientWidth ||
+        windowElement.offsetWidth ||
+        initialWidth;
+      const height =
+        rect.height ||
+        windowElement.clientHeight ||
+        windowElement.offsetHeight ||
+        initialHeight;
+
+      return {
+        left: 0,
+        top: 0,
+        width,
+        height,
+      };
+    };
 
     const getWindowSize = () => {
       const { width, height } = getWindowBounds();
       return { width, height };
     };
 
-    const clampBounds = (bounds) => {
-      const { width: areaWidth, height: areaHeight } = getAreaSize();
-      const sanitizedWidth = sanitizeBoundValue(bounds?.width, initialWidth);
-      const sanitizedHeight = sanitizeBoundValue(bounds?.height, initialHeight);
-      const width = Math.min(Math.max(MIN_WINDOW_WIDTH, sanitizedWidth), areaWidth);
-      const height = Math.min(Math.max(MIN_WINDOW_HEIGHT, sanitizedHeight), areaHeight);
-      const sanitizedLeft = sanitizeBoundValue(bounds?.left, initialLeft);
-      const sanitizedTop = sanitizeBoundValue(bounds?.top, initialTop);
-      const maxLeft = Math.max(0, areaWidth - width);
-      const maxTop = Math.max(0, areaHeight - height);
-
-      return {
-        left: Math.min(Math.max(0, sanitizedLeft), maxLeft),
-        top: Math.min(Math.max(0, sanitizedTop), maxTop),
-        width,
-        height,
-      };
-    };
-
-    const applyBounds = ({ left, top, width, height }) => {
-      windowElement.style.left = `${left}px`;
-      windowElement.style.top = `${top}px`;
-      windowElement.style.width = `${width}px`;
-      windowElement.style.height = `${height}px`;
-    };
-
-    const refreshRestoreBounds = () => {
-      if (isMaximized) {
-        return;
-      }
-
-      restoreBounds = clampBounds(getWindowBounds());
-    };
-
-    restoreBounds = clampBounds(restoreBounds);
-
-    const clampPosition = (left, top) => {
-      const { width: areaWidth, height: areaHeight } = getAreaSize();
-      const { width: windowWidth, height: windowHeight } = getWindowSize();
-      const maxLeft = Math.max(0, areaWidth - windowWidth);
-      const maxTop = Math.max(0, areaHeight - windowHeight);
-
-      return {
-        left: Math.min(Math.max(0, left), maxLeft),
-        top: Math.min(Math.max(0, top), maxTop),
-      };
-    };
-
     const persistState = async ({ includeFile = false } = {}) => {
-      refreshRestoreBounds();
       const descriptor = {
         id: windowId,
         name: file.name,
         type: file.type,
         lastModified: file.lastModified,
-        left: parsePixels(windowElement.style.left, initialLeft),
-        top: parsePixels(windowElement.style.top, initialTop),
-        width: parsePixels(windowElement.style.width, initialWidth),
-        height: parsePixels(windowElement.style.height, initialHeight),
         page: currentPage,
         zoom: currentZoom,
         rotation: currentRotation,
@@ -544,55 +383,10 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         color: windowColor,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
-        maximized: isMaximized,
-        restoreLeft: restoreBounds.left,
-        restoreTop: restoreBounds.top,
-        restoreWidth: restoreBounds.width,
-        restoreHeight: restoreBounds.height,
+        maximized: true,
         bookmarks: bookmarks.slice(),
         windowType,
       };
-
-      const computeLayoutMetadata = () => {
-        const metadata = cloneLayoutMetadata(baseLayoutMetadata);
-        metadata.version = 1;
-
-        const bounds = {
-          left: parsePixels(windowElement.style.left, initialLeft),
-          top: parsePixels(windowElement.style.top, initialTop),
-          width: parsePixels(windowElement.style.width, initialWidth),
-          height: parsePixels(windowElement.style.height, initialHeight),
-        };
-
-        const restore = {
-          left: Number.isFinite(restoreBounds.left) ? restoreBounds.left : bounds.left,
-          top: Number.isFinite(restoreBounds.top) ? restoreBounds.top : bounds.top,
-          width: Number.isFinite(restoreBounds.width) ? restoreBounds.width : bounds.width,
-          height: Number.isFinite(restoreBounds.height) ? restoreBounds.height : bounds.height,
-        };
-
-        const zIndexValue = parseNumericValue(windowElement.style.zIndex ?? '');
-
-        if (Number.isFinite(zIndexValue)) {
-          metadata.zIndex = zIndexValue;
-        } else {
-          delete metadata.zIndex;
-        }
-
-        metadata.bounds = bounds;
-        metadata.restoreBounds = restore;
-        metadata.pinned = windowElement.classList.contains('workspace__window--pinned');
-        metadata.maximized = isMaximized === true;
-
-        return metadata;
-      };
-
-      const layoutMetadata = computeLayoutMetadata();
-      baseLayoutMetadata = cloneLayoutMetadata(layoutMetadata);
-
-      if (layoutMetadata && Object.keys(layoutMetadata).length > 0) {
-        descriptor.layout = layoutMetadata;
-      }
 
       if (includeFile) {
         descriptor.file = file;
@@ -1339,36 +1133,16 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     const isPinned = () => windowElement.classList.contains('workspace__window--pinned');
 
-    const assignZIndex = (customValue) => {
-      if (Number.isFinite(customValue)) {
-        windowElement.style.zIndex = String(customValue);
-
-        if (isPinned()) {
-          pinnedZIndexCounter = Math.max(pinnedZIndexCounter, customValue + 1);
-        } else {
-          zIndexCounter = Math.max(zIndexCounter, customValue + 1);
-        }
-
-        return;
-      }
-
-      if (isPinned()) {
-        windowElement.style.zIndex = String(pinnedZIndexCounter);
-        pinnedZIndexCounter += 1;
-      } else {
-        windowElement.style.zIndex = String(zIndexCounter);
-        zIndexCounter += 1;
-      }
-    };
-
     const bringToFront = ({ persistFocus = true } = {}) => {
       area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
         if (otherWindow !== windowElement) {
           otherWindow.classList.remove('workspace__window--active');
+          otherWindow.dataset.windowActive = 'false';
         }
       });
       windowElement.classList.add('workspace__window--active');
-      assignZIndex();
+      windowElement.dataset.windowActive = 'true';
+      area.dataset.activeWindowId = windowId;
 
       if (persistFocus) {
         lastFocusedAt = Date.now();
@@ -1854,25 +1628,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     });
 
     duplicateButton.addEventListener('click', () => {
-      const baseBounds = isMaximized ? clampBounds(restoreBounds) : getWindowBounds();
-      const currentLeft = baseBounds.left;
-      const currentTop = baseBounds.top;
-      const currentWidth = baseBounds.width;
-      const currentHeight = baseBounds.height;
-      const { width: areaWidth, height: areaHeight } = getAreaSize();
-
-      const proposedLeft = currentLeft + WINDOW_STACK_OFFSET;
-      const proposedTop = currentTop + WINDOW_STACK_OFFSET;
-      const maxLeft = Math.max(0, areaWidth - currentWidth);
-      const maxTop = Math.max(0, areaHeight - currentHeight);
-      const left = Math.min(Math.max(0, proposedLeft), maxLeft);
-      const top = Math.min(Math.max(0, proposedTop), maxTop);
-
       const duplicateElement = openWindow(file, {
-        left,
-        top,
-        width: currentWidth,
-        height: currentHeight,
         page: currentPage,
         zoom: currentZoom,
         rotation: currentRotation,
@@ -1884,11 +1640,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         pageHistoryIndex,
         color: windowColor,
         bookmarks: bookmarks.slice(),
-        restoreLeft: currentLeft,
-        restoreTop: currentTop,
-        restoreWidth: currentWidth,
-        restoreHeight: currentHeight,
-        maximized: false,
+        maximized: true,
       });
 
       if (!duplicateElement) {
@@ -1908,7 +1660,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
           notes: notesController?.getContent() ?? '',
           title: windowTitle,
           color: windowColor,
-          maximized: isMaximized,
+          maximized: true,
           bookmarks: bookmarks.slice(),
         },
       });
@@ -2115,54 +1867,13 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     windowElement.append(header, body);
 
-    const handleMouseDown = (event) => {
-      if (
-        event.target instanceof HTMLElement &&
-        (event.target.closest('.workspace__window-title-input') ||
-          event.target.closest('.workspace__window-rename'))
-      ) {
-        return;
-      }
-
+    header.addEventListener('mousedown', () => {
       if (editingTitle) {
         return;
       }
 
       bringToFront();
-
-      if (isMaximized) {
-        return;
-      }
-
-      event.preventDefault();
-
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const initialLeftPosition = parsePixels(windowElement.style.left, initialLeft);
-      const initialTopPosition = parsePixels(windowElement.style.top, initialTop);
-
-      const handleMouseMove = (moveEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        const deltaY = moveEvent.clientY - startY;
-        const { left, top } = clampPosition(
-          initialLeftPosition + deltaX,
-          initialTopPosition + deltaY,
-        );
-        windowElement.style.left = `${left}px`;
-        windowElement.style.top = `${top}px`;
-      };
-
-      const handleMouseUp = () => {
-        schedulePersist();
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    };
-
-    header.addEventListener('mousedown', handleMouseDown);
+    });
     windowElement.addEventListener('focus', () => {
       bringToFront();
     });
@@ -2272,75 +1983,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
     });
 
-    resizeHandle = document.createElement('button');
-    resizeHandle.type = 'button';
-    resizeHandle.className = 'workspace__window-resize';
-
-    const handleResizeStart = (event) => {
-      event.preventDefault();
-      bringToFront();
-
-      if (isMaximized) {
-        return;
-      }
-
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const initialWidthValue = parsePixels(windowElement.style.width, initialWidth);
-      const initialHeightValue = parsePixels(windowElement.style.height, initialHeight);
-
-      windowElement.classList.add('workspace__window--resizing');
-
-      const handleResizeMove = (moveEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        const deltaY = moveEvent.clientY - startY;
-        const { width: areaWidth, height: areaHeight } = getAreaSize();
-        const currentLeft = parsePixels(windowElement.style.left, initialLeft);
-        const currentTop = parsePixels(windowElement.style.top, initialTop);
-        const availableWidth = Math.max(
-          MIN_WINDOW_WIDTH,
-          areaWidth - currentLeft,
-        );
-        const availableHeight = Math.max(
-          MIN_WINDOW_HEIGHT,
-          areaHeight - currentTop,
-        );
-
-        const proposedWidth = Math.max(MIN_WINDOW_WIDTH, initialWidthValue + deltaX);
-        const proposedHeight = Math.max(MIN_WINDOW_HEIGHT, initialHeightValue + deltaY);
-
-        const nextWidth = Math.min(availableWidth, proposedWidth);
-        const nextHeight = Math.min(availableHeight, proposedHeight);
-
-        windowElement.style.width = `${nextWidth}px`;
-        windowElement.style.height = `${nextHeight}px`;
-        const { left, top } = clampPosition(currentLeft, currentTop);
-        windowElement.style.left = `${left}px`;
-        windowElement.style.top = `${top}px`;
-      };
-
-      const handleResizeEnd = () => {
-        windowElement.classList.remove('workspace__window--resizing');
-        schedulePersist();
-        document.removeEventListener('mousemove', handleResizeMove);
-        document.removeEventListener('mouseup', handleResizeEnd);
-      };
-
-      document.addEventListener('mousemove', handleResizeMove);
-      document.addEventListener('mouseup', handleResizeEnd);
-    };
-
-    resizeHandle.addEventListener('mousedown', handleResizeStart);
-
-    windowElement.append(resizeHandle);
-
-    if (isMaximized) {
-      const { width: areaWidth, height: areaHeight } = getAreaSize();
-      applyBounds({ left: 0, top: 0, width: areaWidth, height: areaHeight });
-    } else {
-      refreshRestoreBounds();
-    }
-
     syncMaximizeState();
     syncWindowColorDisplay();
     syncWindowTitleDisplay();
@@ -2360,15 +2002,11 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       id: windowId,
     });
 
-    const storedZIndex = parseNumericValue(options?.layout?.zIndex);
-
     if (shouldAutoFocus) {
       bringToFront();
       windowElement.focus({ preventScroll: true });
-    } else if (Number.isFinite(storedZIndex)) {
-      assignZIndex(storedZIndex);
     } else {
-      assignZIndex();
+      windowElement.dataset.windowActive = 'false';
     }
 
     syncEmptyState();
@@ -2378,12 +2016,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
   };
 
   const openMemoWindow = (options = {}) => {
-    const offsetIndex = area.children.length;
-    const defaultLeft = offsetIndex * WINDOW_STACK_OFFSET;
-    const defaultTop = offsetIndex * WINDOW_STACK_OFFSET;
-
-    const initialLeft = Number.isFinite(options.left) ? options.left : defaultLeft;
-    const initialTop = Number.isFinite(options.top) ? options.top : defaultTop;
     const initialWidth = Number.isFinite(options.width) ? options.width : DEFAULT_WINDOW_WIDTH;
     const initialHeight = Number.isFinite(options.height) ? options.height : DEFAULT_WINDOW_HEIGHT;
     const shouldAutoFocus = options.autoFocus !== false;
@@ -2418,13 +2050,11 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     windowElement.classList.add('workspace__window');
     windowElement.classList.add('workspace__window--memo');
+    windowElement.classList.add('workspace__window--maximized');
     windowElement.dataset.windowId = windowId;
     windowElement.dataset.windowType = 'memo';
+    windowElement.dataset.windowMaximized = 'true';
     windowElement.tabIndex = 0;
-    windowElement.style.left = `${initialLeft}px`;
-    windowElement.style.top = `${initialTop}px`;
-    windowElement.style.width = `${initialWidth}px`;
-    windowElement.style.height = `${initialHeight}px`;
 
     const header = memoController?.header;
 
@@ -2432,10 +2062,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       throw new Error('メモウィンドウにはヘッダー要素が必要です。');
     }
 
-    let dragMoveHandler = null;
-    let dragEndHandler = null;
-    let resizeMoveHandler = null;
-    let resizeEndHandler = null;
     let disposed = false;
 
     let openedAt = Number.isFinite(options.openedAt) ? options.openedAt : Date.now();
@@ -2448,25 +2074,16 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     syncFocusMetadata();
 
-    const assignZIndex = (customValue) => {
-      if (Number.isFinite(customValue)) {
-        windowElement.style.zIndex = String(customValue);
-        zIndexCounter = Math.max(zIndexCounter, customValue + 1);
-        return;
-      }
-
-      windowElement.style.zIndex = String(zIndexCounter);
-      zIndexCounter += 1;
-    };
-
     const bringToFront = ({ persistFocus = true } = {}) => {
       area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
         if (otherWindow !== windowElement) {
           otherWindow.classList.remove('workspace__window--active');
+          otherWindow.dataset.windowActive = 'false';
         }
       });
       windowElement.classList.add('workspace__window--active');
-      assignZIndex();
+      windowElement.dataset.windowActive = 'true';
+      area.dataset.activeWindowId = windowId;
 
       if (persistFocus) {
         lastFocusedAt = Date.now();
@@ -2482,182 +2099,49 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       });
     }
 
-    const getWindowSize = () => ({
-      width: parsePixels(windowElement.style.width, initialWidth),
-      height: parsePixels(windowElement.style.height, initialHeight),
-    });
-
-    const getWindowBounds = () => ({
-      left: parsePixels(windowElement.style.left, initialLeft),
-      top: parsePixels(windowElement.style.top, initialTop),
-      width: parsePixels(windowElement.style.width, initialWidth),
-      height: parsePixels(windowElement.style.height, initialHeight),
-    });
-
-    const clampBounds = (bounds) => {
-      const proposedLeft = Number.isFinite(bounds?.left) ? bounds.left : initialLeft;
-      const proposedTop = Number.isFinite(bounds?.top) ? bounds.top : initialTop;
-      const proposedWidth = Number.isFinite(bounds?.width) ? bounds.width : initialWidth;
-      const proposedHeight = Number.isFinite(bounds?.height) ? bounds.height : initialHeight;
-
-      const { width: areaWidth, height: areaHeight } = getAreaSize();
-
-      const width = Math.min(Math.max(MIN_WINDOW_WIDTH, proposedWidth), areaWidth);
-      const height = Math.min(Math.max(MIN_WINDOW_HEIGHT, proposedHeight), areaHeight);
-      const maxLeft = Math.max(0, areaWidth - width);
-      const maxTop = Math.max(0, areaHeight - height);
+    const getWindowBounds = () => {
+      const rect = windowElement.getBoundingClientRect();
+      const width =
+        rect.width ||
+        windowElement.clientWidth ||
+        windowElement.offsetWidth ||
+        initialWidth;
+      const height =
+        rect.height ||
+        windowElement.clientHeight ||
+        windowElement.offsetHeight ||
+        initialHeight;
 
       return {
-        left: Math.min(Math.max(0, proposedLeft), maxLeft),
-        top: Math.min(Math.max(0, proposedTop), maxTop),
+        left: 0,
+        top: 0,
         width,
         height,
       };
     };
 
-    const clampPosition = (left, top) => {
-      const { width: areaWidth, height: areaHeight } = getAreaSize();
-      const { width: windowWidth, height: windowHeight } = getWindowSize();
-      const maxLeft = Math.max(0, areaWidth - windowWidth);
-      const maxTop = Math.max(0, areaHeight - windowHeight);
-
-      return {
-        left: Math.min(Math.max(0, left), maxLeft),
-        top: Math.min(Math.max(0, top), maxTop),
-      };
-    };
-
-    const applyBounds = ({ left, top, width, height }) => {
-      windowElement.style.left = `${left}px`;
-      windowElement.style.top = `${top}px`;
-      windowElement.style.width = `${width}px`;
-      windowElement.style.height = `${height}px`;
+    const getWindowSize = () => {
+      const bounds = getWindowBounds();
+      return { width: bounds.width, height: bounds.height };
     };
 
     const handleWindowFocus = () => {
       bringToFront();
     };
 
-    const handleWindowMouseDown = (event) => {
-      if (
-        event.target instanceof HTMLElement &&
-        event.target.closest('button, textarea, input, [contenteditable="true"]')
-      ) {
-        return;
-      }
-
+    const handleWindowMouseDown = () => {
       bringToFront();
       windowElement.focus({ preventScroll: true });
     };
 
-    const handleDragEnd = () => {
-      if (dragMoveHandler) {
-        document.removeEventListener('mousemove', dragMoveHandler);
-        dragMoveHandler = null;
-      }
-
-      if (dragEndHandler) {
-        document.removeEventListener('mouseup', dragEndHandler);
-        dragEndHandler = null;
-      }
-    };
-
-    const handleHeaderMouseDown = (event) => {
-      if (event.button !== 0) {
-        return;
-      }
-
-      if (
-        event.target instanceof HTMLElement &&
-        event.target.closest('button, textarea, input, [contenteditable="true"]')
-      ) {
-        return;
-      }
-
+    const handleHeaderInteraction = () => {
       bringToFront();
-      event.preventDefault();
-
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const bounds = getWindowBounds();
-
-      dragMoveHandler = (moveEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        const deltaY = moveEvent.clientY - startY;
-        const { left, top } = clampPosition(bounds.left + deltaX, bounds.top + deltaY);
-
-        windowElement.style.left = `${left}px`;
-        windowElement.style.top = `${top}px`;
-      };
-
-      dragEndHandler = () => {
-        handleDragEnd();
-      };
-
-      document.addEventListener('mousemove', dragMoveHandler);
-      document.addEventListener('mouseup', dragEndHandler);
     };
 
-    const resizeHandle = document.createElement('button');
-    resizeHandle.type = 'button';
-    resizeHandle.className = 'workspace__window-resize';
-    resizeHandle.setAttribute('aria-label', 'メモウィンドウのサイズを変更');
-
-    const handleResizeEnd = () => {
-      windowElement.classList.remove('workspace__window--resizing');
-
-      if (resizeMoveHandler) {
-        document.removeEventListener('mousemove', resizeMoveHandler);
-        resizeMoveHandler = null;
-      }
-
-      if (resizeEndHandler) {
-        document.removeEventListener('mouseup', resizeEndHandler);
-        resizeEndHandler = null;
-      }
-    };
-
-    const handleResizeStart = (event) => {
-      if (event.button !== 0) {
-        return;
-      }
-
-      bringToFront();
-      event.preventDefault();
-
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const bounds = getWindowBounds();
-
-      windowElement.classList.add('workspace__window--resizing');
-
-      resizeMoveHandler = (moveEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        const deltaY = moveEvent.clientY - startY;
-
-        const nextBounds = clampBounds({
-          left: bounds.left,
-          top: bounds.top,
-          width: bounds.width + deltaX,
-          height: bounds.height + deltaY,
-        });
-
-        applyBounds(nextBounds);
-      };
-
-      resizeEndHandler = () => {
-        handleResizeEnd();
-      };
-
-      document.addEventListener('mousemove', resizeMoveHandler);
-      document.addEventListener('mouseup', resizeEndHandler);
-    };
+    header.addEventListener('mousedown', handleHeaderInteraction);
 
     const cleanupInteractions = () => {
-      handleDragEnd();
-      handleResizeEnd();
-      header.removeEventListener('mousedown', handleHeaderMouseDown);
-      resizeHandle.removeEventListener('mousedown', handleResizeStart);
+      header.removeEventListener('mousedown', handleHeaderInteraction);
       windowElement.removeEventListener('focus', handleWindowFocus);
       windowElement.removeEventListener('mousedown', handleWindowMouseDown);
     };
@@ -2669,7 +2153,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       disposed = true;
       cleanupInteractions();
-      resizeHandle.remove();
       windowElement.remove();
       windowRegistry.delete(windowId);
       syncEmptyState();
@@ -2679,12 +2162,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
     };
 
-    header.addEventListener('mousedown', handleHeaderMouseDown);
-    resizeHandle.addEventListener('mousedown', handleResizeStart);
     windowElement.addEventListener('focus', handleWindowFocus);
     windowElement.addEventListener('mousedown', handleWindowMouseDown);
-
-    windowElement.append(resizeHandle);
     area.append(windowElement);
 
     windowRegistry.set(windowId, {
@@ -2710,7 +2189,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         windowElement.focus({ preventScroll: true });
       }
     } else {
-      assignZIndex();
+      windowElement.dataset.windowActive = 'false';
     }
 
     return windowElement;

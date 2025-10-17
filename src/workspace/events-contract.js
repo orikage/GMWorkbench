@@ -180,26 +180,8 @@ const CONTRACT = {
         type: 'boolean',
         description: 'True when the window is currently maximized.',
       },
-      left: { type: 'number', description: 'Current left position in pixels.' },
-      top: { type: 'number', description: 'Current top position in pixels.' },
       width: { type: 'number', description: 'Current width in pixels.' },
       height: { type: 'number', description: 'Current height in pixels.' },
-      restoreLeft: {
-        type: 'number',
-        description: 'Stored left value used when leaving maximized mode.',
-      },
-      restoreTop: {
-        type: 'number',
-        description: 'Stored top value used when leaving maximized mode.',
-      },
-      restoreWidth: {
-        type: 'number',
-        description: 'Stored width used when leaving maximized mode.',
-      },
-      restoreHeight: {
-        type: 'number',
-        description: 'Stored height used when leaving maximized mode.',
-      },
     },
   },
   [WINDOW_PAGE_CHANGE_EVENT]: {

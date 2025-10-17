@@ -35,6 +35,27 @@ export function createWorkspace() {
 
   const quickPanel = createHint();
   const menu = createWorkspaceMenu();
+  const panels = new Map();
+  let canvas = null;
+  let onboardingCompleted = false;
+  let onboarding = null;
+  let stageOverlay = null;
+  let stageHint = null;
+
+  const syncPanelVisibility = () => {
+    const activeMenuId = menu.getActiveId?.();
+
+    panels.forEach((panel, panelId) => {
+      const isActive = panelId === activeMenuId;
+      panel.hidden = !isActive;
+
+      if (isActive) {
+        panel.dataset.panelActive = 'true';
+      } else {
+        delete panel.dataset.panelActive;
+      }
+    });
+  };
 
   const syncMenuDataset = () => {
     const activeMenuId = menu.getActiveId?.();
@@ -44,6 +65,9 @@ export function createWorkspace() {
     } else {
       delete workspace.dataset.activeMenu;
     }
+
+    syncPanelVisibility();
+    updateOnboardingVisibility();
   };
 
   const syncTrackDataset = () => {
@@ -77,6 +101,9 @@ export function createWorkspace() {
     } else {
       delete workspace.dataset.activeMenu;
     }
+
+    syncPanelVisibility();
+    updateOnboardingVisibility();
   });
 
   workspace.addEventListener(WORKSPACE_TRACK_CHANGE_EVENT, (event) => {
@@ -100,25 +127,33 @@ export function createWorkspace() {
   });
 
   const queue = createFileQueue();
-  let canvas = null;
-  let onboardingCompleted = false;
-  let onboarding = null;
 
   const dropZone = createDropZone();
 
-  const updateOnboardingVisibility = (count) => {
-    if (!onboarding) {
-      return;
-    }
-
+  function updateOnboardingVisibility(count) {
     const windowCount = Number.isFinite(count)
       ? count
       : canvas?.getWindowCount?.() ?? 0;
 
     const hasWindows = windowCount > 0;
-    onboarding.setActive(!onboardingCompleted && !hasWindows);
     workspace.classList.toggle('workspace--has-windows', hasWindows);
-  };
+
+    const activeMenuId = menu.getActiveId?.();
+    const isBrowserActive = activeMenuId === 'browser';
+
+    if (onboarding) {
+      const shouldShowOnboarding = !onboardingCompleted && !hasWindows && isBrowserActive;
+      onboarding.setActive(shouldShowOnboarding);
+    }
+
+    if (stageOverlay) {
+      stageOverlay.hidden = hasWindows || !isBrowserActive;
+    }
+
+    if (stageHint) {
+      stageHint.hidden = hasWindows;
+    }
+  }
 
   const setOnboardingCompletion = async (completed) => {
     await persistWorkspacePreference(PREF_ONBOARDING_COMPLETED, completed === true);
@@ -456,23 +491,68 @@ export function createWorkspace() {
   stage.className = 'workspace__stage';
   stage.append(canvas.element);
 
-  const overlay = document.createElement('div');
-  overlay.className = 'workspace__stage-overlay';
-  overlay.append(dropZone, onboarding.element);
-  stage.append(overlay);
+  stageOverlay = document.createElement('div');
+  stageOverlay.className = 'workspace__stage-overlay';
 
-  const floatingMenu = document.createElement('div');
-  floatingMenu.className = 'workspace__floating workspace__floating--menu';
-  floatingMenu.append(menu.element);
+  const stageContentFragment = document.createDocumentFragment();
+  stageContentFragment.append(onboarding.element);
 
-  const floatingUtilities = document.createElement('div');
-  floatingUtilities.className = 'workspace__floating workspace__floating--utilities';
-  floatingUtilities.append(queue.element, maintenance.element);
+  stageHint = document.createElement('p');
+  stageHint.className = 'workspace__stage-hint';
+  stageHint.textContent = '「PDFブラウザ」メニューからPDFを開くとここに表示されます。';
+  stageContentFragment.append(stageHint);
 
-  const floatingQuick = document.createElement('div');
-  floatingQuick.className = 'workspace__floating workspace__floating--quick';
-  floatingQuick.append(quickPanel);
+  stageOverlay.append(stageContentFragment);
+  stage.append(stageOverlay);
 
-  workspace.append(stage, floatingMenu, floatingUtilities, floatingQuick);
+  const layout = document.createElement('div');
+  layout.className = 'workspace__layout';
+
+  const menuSurface = document.createElement('aside');
+  menuSurface.className = 'workspace__menu-surface';
+  menuSurface.append(menu.element);
+
+  const panelsContainer = document.createElement('div');
+  panelsContainer.className = 'workspace__menu-panels';
+  menuSurface.append(panelsContainer);
+
+  const registerPanel = (id, nodes) => {
+    const panel = document.createElement('section');
+    panel.className = 'workspace__menu-panel';
+    panel.dataset.menuPanel = id;
+    panel.hidden = true;
+
+    const elements = Array.isArray(nodes) ? nodes : [nodes];
+    elements.filter(Boolean).forEach((node) => {
+      panel.append(node);
+    });
+
+    panels.set(id, panel);
+    panelsContainer.append(panel);
+    return panel;
+  };
+
+  registerPanel('browser', [dropZone, queue.element]);
+
+  const npcNote = document.createElement('p');
+  npcNote.className = 'workspace__menu-note';
+  npcNote.textContent = '仲間やNPCに関するひらめきを素早く残せます。';
+  registerPanel('npc', [npcNote, quickPanel]);
+
+  const mapNote = document.createElement('p');
+  mapNote.className = 'workspace__menu-note';
+  mapNote.textContent = 'マップビューの更新をお待ちください。';
+  registerPanel('map', mapNote);
+
+  const logNote = document.createElement('p');
+  logNote.className = 'workspace__menu-note';
+  logNote.textContent = '保存データの書き出し・読み込みとキャッシュ管理を行えます。';
+  registerPanel('log', [logNote, maintenance.element]);
+
+  layout.append(stage, menuSurface);
+  workspace.append(layout);
+
+  syncPanelVisibility();
+  updateOnboardingVisibility();
   return workspace;
 }

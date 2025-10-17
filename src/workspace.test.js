@@ -255,16 +255,23 @@ describe('createWorkspace', () => {
     expect(workspace).toBeInstanceOf(HTMLElement);
     expect(workspace.dataset.role).toBe('workspace');
     expect(workspace.dataset.theme).toBe('midnight');
+    expect(workspace.querySelector('.workspace__layout')).not.toBeNull();
     expect(workspace.querySelector('.workspace__stage')).not.toBeNull();
     expect(workspace.querySelector('.workspace__canvas')).not.toBeNull();
     expect(workspace.querySelector('.workspace__stage-overlay')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__drop-zone')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__button')?.textContent).toBe('PDFを開く');
-    expect(workspace.querySelector('.workspace__file-input')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__stage-hint')).not.toBeNull();
     expect(workspace.querySelector('.workspace__onboarding')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__floating--utilities .workspace__queue')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__floating--quick .workspace__quick-panel')).not.toBeNull();
-    expect(workspace.querySelector('.workspace__floating--menu .workspace__menu')).not.toBeNull();
+    const browserPanel = workspace.querySelector(
+      '.workspace__menu-panel[data-menu-panel="browser"]',
+    );
+    expect(browserPanel?.querySelector('.workspace__drop-zone')).not.toBeNull();
+    expect(browserPanel?.querySelector('.workspace__queue')).not.toBeNull();
+    const npcPanel = workspace.querySelector('.workspace__menu-panel[data-menu-panel="npc"]');
+    expect(npcPanel?.querySelector('.workspace__quick-panel')).not.toBeNull();
+    const logPanel = workspace.querySelector('.workspace__menu-panel[data-menu-panel="log"]');
+    expect(logPanel?.querySelector('.workspace__maintenance')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__menu')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__floating')).toBeNull();
     expect(workspace.querySelector('.workspace__app-bar')).toBeNull();
   });
 
@@ -367,24 +374,8 @@ describe('createWorkspace', () => {
     expect(onboarding?.hidden).toBe(true);
   });
 
-  it('creates memo windows that support focus, movement, and resizing', () => {
+  it('creates memo windows that open maximized and manage focus state', () => {
     const workspace = createWorkspace();
-    const area = workspace.querySelector('.workspace__windows');
-
-    expect(area).toBeInstanceOf(HTMLElement);
-
-    if (!(area instanceof HTMLElement)) {
-      throw new Error('memo tests require the workspace canvas element');
-    }
-
-    area.getBoundingClientRect = () => ({
-      width: 1200,
-      height: 800,
-      top: 0,
-      left: 0,
-      right: 1200,
-      bottom: 800,
-    });
 
     workspace.dispatchEvent(
       new CustomEvent(WORKSPACE_QUICK_MEMO_REQUEST_EVENT, { bubbles: true }),
@@ -399,51 +390,17 @@ describe('createWorkspace', () => {
     }
 
     expect(firstMemo.dataset.windowType).toBe('memo');
+    expect(firstMemo.dataset.windowMaximized).toBe('true');
+    expect(firstMemo.classList.contains('workspace__window--maximized')).toBe(true);
+    expect(firstMemo.dataset.windowActive).toBe('true');
+    expect(firstMemo.style.left).toBe('');
+    expect(firstMemo.style.top).toBe('');
+    expect(firstMemo.style.width).toBe('');
+    expect(firstMemo.style.height).toBe('');
 
     const textarea = firstMemo.querySelector('textarea');
 
     expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
-    expect(firstMemo.classList.contains('workspace__window--active')).toBe(true);
-
-    const header = firstMemo.querySelector('.workspace__window-header');
-
-    expect(header).toBeInstanceOf(HTMLElement);
-
-    if (!(header instanceof HTMLElement)) {
-      throw new Error('memo window header is required for drag tests');
-    }
-
-    const initialLeft = firstMemo.style.left;
-    const initialTop = firstMemo.style.top;
-
-    header.dispatchEvent(
-      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }),
-    );
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 90, clientY: 70 }));
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 90, clientY: 70 }));
-
-    expect(firstMemo.style.left).not.toBe(initialLeft);
-    expect(firstMemo.style.top).not.toBe(initialTop);
-
-    const resizeHandle = firstMemo.querySelector('.workspace__window-resize');
-
-    expect(resizeHandle).toBeInstanceOf(HTMLElement);
-
-    if (!(resizeHandle instanceof HTMLElement)) {
-      throw new Error('memo window resize handle is required for resizing tests');
-    }
-
-    const startingWidth = Number.parseFloat(firstMemo.style.width);
-    const startingHeight = Number.parseFloat(firstMemo.style.height);
-
-    resizeHandle.dispatchEvent(
-      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 260, clientY: 220 }),
-    );
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 320, clientY: 280 }));
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 320, clientY: 280 }));
-
-    expect(Number.parseFloat(firstMemo.style.width)).toBeGreaterThan(startingWidth);
-    expect(Number.parseFloat(firstMemo.style.height)).toBeGreaterThan(startingHeight);
 
     workspace.dispatchEvent(
       new CustomEvent(WORKSPACE_QUICK_MEMO_REQUEST_EVENT, { bubbles: true }),
@@ -455,19 +412,14 @@ describe('createWorkspace', () => {
 
     const secondMemo = memoWindows[1];
 
-    expect(secondMemo.classList.contains('workspace__window--active')).toBe(true);
+    expect(secondMemo.dataset.windowActive).toBe('true');
+    expect(secondMemo.dataset.windowMaximized).toBe('true');
+    expect(firstMemo.dataset.windowActive).toBe('false');
 
-    header.dispatchEvent(
-      new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 20, clientY: 20 }),
-    );
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 20, clientY: 20 }));
+    textarea?.dispatchEvent(new FocusEvent('focus'));
 
-    expect(firstMemo.classList.contains('workspace__window--active')).toBe(true);
-    expect(
-      Number.parseInt(firstMemo.style.zIndex || '0', 10) >
-        Number.parseInt(secondMemo.style.zIndex || '0', 10),
-    ).toBe(true);
-
+    expect(firstMemo.dataset.windowActive).toBe('true');
+    expect(secondMemo.dataset.windowActive).toBe('false');
   });
 
   it('opens the sample PDF from onboarding without requiring a manual file', async () => {
@@ -638,7 +590,7 @@ describe('createWorkspace', () => {
     expect(outlineEvents.mock.calls.at(-1)?.[0].detail.page).toBe(4);
   });
 
-  it('restores persisted windows with their saved layout and focus', async () => {
+  it('restores persisted windows with their metadata and maximized layout', async () => {
     const persistedFile = new File(['persisted'], 'stored.pdf', {
       type: 'application/pdf',
       lastModified: 123,
@@ -676,13 +628,14 @@ describe('createWorkspace', () => {
     const windowElement = workspace.querySelector('.workspace__window');
     const maximizeButton = workspace.querySelector('.workspace__window-maximize');
     const resizeHandle = workspace.querySelector('.workspace__window-resize');
+    const pinButton = workspace.querySelector('.workspace__window-pin');
 
     expect(windowElement).not.toBeNull();
     expect(windowElement?.classList.contains('workspace__window--pinned')).toBe(true);
-    expect(windowElement?.style.left).toBe('48px');
-    expect(windowElement?.style.top).toBe('64px');
-    expect(windowElement?.style.width).toBe('512px');
-    expect(windowElement?.style.height).toBe('420px');
+    expect(windowElement?.style.left).toBe('');
+    expect(windowElement?.style.top).toBe('');
+    expect(windowElement?.style.width).toBe('');
+    expect(windowElement?.style.height).toBe('');
     expect(windowElement?.dataset.windowTitle).toBe('永続ウィンドウ');
     expect(windowElement?.dataset.windowColor).toBe('emerald');
     expect(windowElement?.classList.contains('workspace__window--color-emerald')).toBe(true);
@@ -702,11 +655,16 @@ describe('createWorkspace', () => {
     expect(notesField?.value).toBe('復元メモ');
     expect(notesCounter?.textContent).toBe(`${'復元メモ'.length}文字`);
     expect(windowElement?.dataset.notesLength).toBe(String('復元メモ'.length));
-    expect(windowElement?.dataset.windowMaximized).toBe('false');
+    expect(windowElement?.dataset.windowMaximized).toBe('true');
     expect(windowElement?.dataset.bookmarkCount).toBe('2');
     expect(windowElement?.dataset.bookmarkPages).toBe('2,4');
-    expect(maximizeButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(resizeHandle?.disabled).toBe(false);
+    expect(maximizeButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(maximizeButton?.textContent).toBe('最大化済み');
+    expect(maximizeButton?.hidden).toBe(true);
+    expect(maximizeButton?.disabled).toBe(true);
+    expect(pinButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(pinButton?.textContent).toBe('ピン解除');
+    expect(resizeHandle).toBeNull();
 
     const activeWindow = workspace.querySelector('.workspace__window--active');
     expect(activeWindow).toBe(windowElement);
@@ -720,7 +678,7 @@ describe('createWorkspace', () => {
     expect(bookmarkAddButton?.disabled).toBe(true);
   });
 
-  it('restores maximized windows and disables manual layout controls', async () => {
+  it('restores maximized windows with hidden manual layout controls', async () => {
     const persistedFile = new File(['max'], 'maximized.pdf', {
       type: 'application/pdf',
       lastModified: 789,
@@ -757,23 +715,23 @@ describe('createWorkspace', () => {
 
     expect(windowElement).not.toBeNull();
     expect(maximizeButton).not.toBeNull();
-    expect(resizeHandle).not.toBeNull();
 
     expect(windowElement?.classList.contains('workspace__window--maximized')).toBe(true);
     expect(windowElement?.dataset.windowMaximized).toBe('true');
-    expect(windowElement?.style.left).toBe('0px');
-    expect(windowElement?.style.top).toBe('0px');
-    expect(windowElement?.style.width).toBe('960px');
-    expect(windowElement?.style.height).toBe('640px');
+    expect(windowElement?.style.left).toBe('');
+    expect(windowElement?.style.top).toBe('');
+    expect(windowElement?.style.width).toBe('');
+    expect(windowElement?.style.height).toBe('');
     expect(windowElement?.dataset.windowTitle).toBe('最大ウィンドウ');
     expect(maximizeButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(maximizeButton?.textContent).toBe('縮小');
+    expect(maximizeButton?.textContent).toBe('最大化済み');
     expect(maximizeButton?.getAttribute('aria-label')).toBe('最大ウィンドウ を元のサイズに戻す');
-    expect(resizeHandle?.disabled).toBe(true);
-    expect(resizeHandle?.getAttribute('aria-hidden')).toBe('true');
+    expect(maximizeButton?.hidden).toBe(true);
+    expect(maximizeButton?.disabled).toBe(true);
+    expect(resizeHandle).toBeNull();
   });
 
-  it('persists window type and layout metadata across reloads', async () => {
+  it('persists window metadata without layout bounds across reloads', async () => {
     const fileA = new File(['A'], 'layout-a.pdf', {
       type: 'application/pdf',
       lastModified: 111,
@@ -848,14 +806,17 @@ describe('createWorkspace', () => {
 
     expect(windowA.dataset.windowType).toBe('pdf');
     expect(windowB.dataset.windowType).toBe('pdf');
-
-    expect(Number.parseInt(windowA.style.zIndex ?? '', 10)).toBe(120);
-    expect(Number.parseInt(windowB.style.zIndex ?? '', 10)).toBeGreaterThanOrEqual(10020);
+    expect(windowA.dataset.windowMaximized).toBe('true');
+    expect(windowB.dataset.windowMaximized).toBe('true');
     expect(windowB.classList.contains('workspace__window--pinned')).toBe(true);
+
+    const pinButton = windowB.querySelector('.workspace__window-pin');
+
+    expect(pinButton).toBeInstanceOf(HTMLButtonElement);
 
     storageMocks.persist.mockClear();
 
-    windowB.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    pinButton?.dispatchEvent(new Event('click', { bubbles: true }));
 
     await flushPromises();
     await flushPromises();
@@ -871,28 +832,17 @@ describe('createWorkspace', () => {
     const descriptor = lastPersist[0];
 
     expect(descriptor?.windowType).toBe('pdf');
-    expect(descriptor?.layout?.version).toBe(1);
-    expect(descriptor?.layout?.pinned).toBe(true);
-    expect(descriptor?.layout?.maximized).toBe(false);
-    expect(descriptor?.layout?.zIndex).toBe(
-      Number.parseInt(windowB.style.zIndex ?? '0', 10),
-    );
-    expect(descriptor?.layout?.bounds).toEqual({
-      left: Number.parseFloat(windowB.style.left ?? '0'),
-      top: Number.parseFloat(windowB.style.top ?? '0'),
-      width: Number.parseFloat(windowB.style.width ?? '0'),
-      height: Number.parseFloat(windowB.style.height ?? '0'),
-    });
-    expect(descriptor?.restoreLeft).toBeCloseTo(280, 6);
-    expect(descriptor?.restoreTop).toBeCloseTo(180, 6);
-    expect(descriptor?.restoreWidth).toBeCloseTo(420, 6);
-    expect(descriptor?.restoreHeight).toBeCloseTo(320, 6);
-    expect(descriptor?.layout?.restoreBounds).toEqual({
-      left: descriptor.restoreLeft,
-      top: descriptor.restoreTop,
-      width: descriptor.restoreWidth,
-      height: descriptor.restoreHeight,
-    });
+    expect(descriptor?.pinned).toBe(false);
+    expect(descriptor?.maximized).toBe(true);
+    expect(descriptor?.layout).toBeUndefined();
+    expect(descriptor?.left).toBeUndefined();
+    expect(descriptor?.top).toBeUndefined();
+    expect(descriptor?.width).toBeUndefined();
+    expect(descriptor?.height).toBeUndefined();
+    expect(descriptor?.restoreLeft).toBeUndefined();
+    expect(descriptor?.restoreTop).toBeUndefined();
+    expect(descriptor?.restoreWidth).toBeUndefined();
+    expect(descriptor?.restoreHeight).toBeUndefined();
   });
 
   it('restores stored page history metadata and keeps navigation controls aligned', async () => {
@@ -1135,7 +1085,7 @@ describe('createWorkspace', () => {
     expect(windowElement.dataset.zoomFitMode).toBe('manual');
   });
 
-  it('stacks new windows with offsets and updates the active state', async () => {
+  it('activates the most recently opened window while keeping others available', async () => {
     const workspace = createWorkspace();
     const canvas = workspace.querySelector('.workspace__canvas');
 
@@ -1152,18 +1102,31 @@ describe('createWorkspace', () => {
     const windows = canvas.querySelectorAll('.workspace__window');
 
     expect(windows).toHaveLength(2);
-    expect(windows[0].style.left).toBe('0px');
-    expect(windows[0].style.top).toBe('0px');
-    expect(windows[1].style.left).toBe('24px');
-    expect(windows[1].style.top).toBe('24px');
+    expect(windows[0].dataset.windowMaximized).toBe('true');
+    expect(windows[1].dataset.windowMaximized).toBe('true');
+    expect(windows[0].style.left).toBe('');
+    expect(windows[0].style.top).toBe('');
+    expect(windows[1].style.left).toBe('');
+    expect(windows[1].style.top).toBe('');
     expect(windows[0].classList.contains('workspace__window--active')).toBe(false);
     expect(windows[1].classList.contains('workspace__window--active')).toBe(true);
-    expect(Number.parseInt(windows[1].style.zIndex ?? '0', 10)).toBeGreaterThan(
-      Number.parseInt(windows[0].style.zIndex ?? '0', 10),
-    );
+    expect(windows[1].dataset.windowActive).toBe('true');
+
+    const firstHeader = windows[0].querySelector('.workspace__window-header');
+
+    if (!(firstHeader instanceof HTMLElement)) {
+      throw new Error('window header is required to test focus changes');
+    }
+
+    firstHeader.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    expect(windows[0].classList.contains('workspace__window--active')).toBe(true);
+    expect(windows[0].dataset.windowActive).toBe('true');
+    expect(windows[1].classList.contains('workspace__window--active')).toBe(false);
+    expect(windows[1].dataset.windowActive).toBe('false');
   });
 
-  it('allows dragging windows via the header to update position', async () => {
+  it('ignores manual drag attempts and keeps windows maximized', async () => {
     const workspace = createWorkspace();
 
     const file = new File(['dummy'], 'drag.pdf', { type: 'application/pdf' });
@@ -1177,8 +1140,9 @@ describe('createWorkspace', () => {
       throw new Error('window structure is required for the test');
     }
 
-    expect(windowElement.style.left).toBe('0px');
-    expect(windowElement.style.top).toBe('0px');
+    expect(windowElement.dataset.windowMaximized).toBe('true');
+    expect(windowElement.style.left).toBe('');
+    expect(windowElement.style.top).toBe('');
 
     header.dispatchEvent(
       new MouseEvent('mousedown', {
@@ -1201,11 +1165,12 @@ describe('createWorkspace', () => {
       }),
     );
 
-    expect(windowElement.style.left).toBe('40px');
-    expect(windowElement.style.top).toBe('60px');
+    expect(windowElement.dataset.windowMaximized).toBe('true');
+    expect(windowElement.style.left).toBe('');
+    expect(windowElement.style.top).toBe('');
   });
 
-  it('keeps windows within the canvas bounds while dragging', async () => {
+  it('keeps window layout unchanged even when drag events exceed bounds', async () => {
     const workspace = createWorkspace();
 
     const file = new File(['dummy'], 'bounded-drag.pdf', {
@@ -1255,11 +1220,12 @@ describe('createWorkspace', () => {
       }),
     );
 
-    expect(windowElement.style.left).toBe('180px');
-    expect(windowElement.style.top).toBe('80px');
+    expect(windowElement.dataset.windowMaximized).toBe('true');
+    expect(windowElement.style.left).toBe('');
+    expect(windowElement.style.top).toBe('');
   });
 
-  it('resizes windows via the resize handle while enforcing minimum bounds', async () => {
+  it('omits resize handles to enforce full-window layout', async () => {
     const workspace = createWorkspace();
 
     const file = new File(['dummy'], 'resize.pdf', { type: 'application/pdf' });
@@ -1269,70 +1235,13 @@ describe('createWorkspace', () => {
     const windowElement = workspace.querySelector('.workspace__window');
     const handle = workspace.querySelector('.workspace__window-resize');
 
-    if (!windowElement || !handle) {
-      throw new Error('window resize structure is required for the test');
-    }
-
-    const initialWidth = parseFloat(windowElement.style.width || '0');
-    const initialHeight = parseFloat(windowElement.style.height || '0');
-
-    handle.dispatchEvent(
-      new MouseEvent('mousedown', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 100,
-      }),
-    );
-
-    document.dispatchEvent(
-      new MouseEvent('mousemove', {
-        clientX: 160,
-        clientY: 180,
-      }),
-    );
-
-    document.dispatchEvent(
-      new MouseEvent('mouseup', {
-        bubbles: true,
-      }),
-    );
-
-    const grownWidth = parseFloat(windowElement.style.width || '0');
-    const grownHeight = parseFloat(windowElement.style.height || '0');
-
-    expect(grownWidth).toBeGreaterThan(initialWidth);
-    expect(grownHeight).toBeGreaterThan(initialHeight);
-    expect(windowElement.classList.contains('workspace__window--resizing')).toBe(false);
-
-    handle.dispatchEvent(
-      new MouseEvent('mousedown', {
-        bubbles: true,
-        clientX: 200,
-        clientY: 200,
-      }),
-    );
-
-    document.dispatchEvent(
-      new MouseEvent('mousemove', {
-        clientX: 40,
-        clientY: 40,
-      }),
-    );
-
-    document.dispatchEvent(
-      new MouseEvent('mouseup', {
-        bubbles: true,
-      }),
-    );
-
-    const shrunkenWidth = parseFloat(windowElement.style.width || '0');
-    const shrunkenHeight = parseFloat(windowElement.style.height || '0');
-
-    expect(shrunkenWidth).toBeGreaterThanOrEqual(260);
-    expect(shrunkenHeight).toBeGreaterThanOrEqual(220);
+    expect(windowElement).toBeInstanceOf(HTMLElement);
+    expect(handle).toBeNull();
+    expect(windowElement?.dataset.windowMaximized).toBe('true');
+    expect(windowElement?.classList.contains('workspace__window--resizing')).toBe(false);
   });
 
-  it('limits window resizing to stay within the canvas bounds', async () => {
+  it('does not provide resize handles within the canvas area', async () => {
     const workspace = createWorkspace();
 
     const file = new File(['dummy'], 'bounded-resize.pdf', {
@@ -1341,49 +1250,9 @@ describe('createWorkspace', () => {
 
     await openWindow(workspace, file);
 
-    const windowElement = workspace.querySelector('.workspace__window');
     const handle = workspace.querySelector('.workspace__window-resize');
-    const area = workspace.querySelector('.workspace__windows');
 
-    if (!windowElement || !handle || !area) {
-      throw new Error('window structure is required for the test');
-    }
-
-    area.getBoundingClientRect = () => ({
-      width: 640,
-      height: 420,
-      top: 0,
-      left: 0,
-      bottom: 420,
-      right: 640,
-      x: 0,
-      y: 0,
-      toJSON: () => {},
-    });
-
-    handle.dispatchEvent(
-      new MouseEvent('mousedown', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 100,
-      }),
-    );
-
-    document.dispatchEvent(
-      new MouseEvent('mousemove', {
-        clientX: 900,
-        clientY: 900,
-      }),
-    );
-
-    document.dispatchEvent(
-      new MouseEvent('mouseup', {
-        bubbles: true,
-      }),
-    );
-
-    expect(windowElement.style.width).toBe('640px');
-    expect(windowElement.style.height).toBe('420px');
+    expect(handle).toBeNull();
   });
 
   it('pins windows so they remain above other documents', async () => {
@@ -1416,10 +1285,9 @@ describe('createWorkspace', () => {
 
     windows[1].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
 
-    const pinnedZ = Number.parseInt(windows[0].style.zIndex ?? '0', 10);
-    const regularZ = Number.parseInt(windows[1].style.zIndex ?? '0', 10);
-
-    expect(pinnedZ).toBeGreaterThan(regularZ);
+    expect(windows[0].classList.contains('workspace__window--pinned')).toBe(true);
+    expect(windows[0].dataset.windowMaximized).toBe('true');
+    expect(windows[1].classList.contains('workspace__window--active')).toBe(true);
 
     pinButton.click();
 
@@ -1559,7 +1427,7 @@ describe('createWorkspace', () => {
     expect(duplicateWindow?.dataset.windowTitle).toBe('魔王討伐計画');
     expect(duplicateWindow?.dataset.windowColor).toBe('emerald');
     expect(duplicateWindow?.dataset.rotation).toBe('270');
-    expect(duplicateWindow?.dataset.windowMaximized).toBe('false');
+    expect(duplicateWindow?.dataset.windowMaximized).toBe('true');
     expect(duplicateWindow?.dataset.bookmarkPages).toBe(
       originalWindow.dataset.bookmarkPages,
     );
@@ -1576,13 +1444,10 @@ describe('createWorkspace', () => {
     expect(duplicateWindow?.classList.contains('workspace__window--pinned')).toBe(true);
     expect(rotateResetButton.disabled).toBe(false);
 
-    const originalLeft = Number.parseInt(originalWindow.style.left ?? '0', 10);
-    const originalTop = Number.parseInt(originalWindow.style.top ?? '0', 10);
-    const duplicateLeft = Number.parseInt(duplicateWindow?.style.left ?? '0', 10);
-    const duplicateTop = Number.parseInt(duplicateWindow?.style.top ?? '0', 10);
-
-    expect(duplicateLeft - originalLeft).toBe(24);
-    expect(duplicateTop - originalTop).toBe(24);
+    expect(originalWindow.style.left).toBe('');
+    expect(originalWindow.style.top).toBe('');
+    expect(duplicateWindow?.style.left).toBe('');
+    expect(duplicateWindow?.style.top).toBe('');
 
     expect(duplicateHandler).toHaveBeenCalledTimes(1);
     const detail = duplicateHandler.mock.calls[0][0].detail;
@@ -1596,11 +1461,11 @@ describe('createWorkspace', () => {
     expect(detail.notes).toBe('魔王城の罠メモ');
     expect(detail.title).toBe('魔王討伐計画');
     expect(detail.color).toBe('emerald');
-    expect(detail.maximized).toBe(false);
+    expect(detail.maximized).toBe(true);
     expect(detail.bookmarks).toEqual([3, 5]);
   });
 
-  it('toggles window maximization, emits events, and persists restore bounds', async () => {
+  it('keeps windows maximized and hides maximize controls', async () => {
     const workspace = createWorkspace();
     const file = new File(['max'], 'max.pdf', { type: 'application/pdf' });
 
@@ -1610,108 +1475,35 @@ describe('createWorkspace', () => {
     const maximizeButton = workspace.querySelector('.workspace__window-maximize');
     const resizeHandle = workspace.querySelector('.workspace__window-resize');
 
-    if (!windowElement || !maximizeButton || !resizeHandle) {
-      throw new Error('maximize controls must exist for the test');
-    }
-
-    const parsePixels = (value) => Number.parseFloat(value ?? '0');
-    const initialLeft = parsePixels(windowElement.style.left);
-    const initialTop = parsePixels(windowElement.style.top);
-    const initialWidth = parsePixels(windowElement.style.width);
-    const initialHeight = parsePixels(windowElement.style.height);
+    expect(windowElement).toBeInstanceOf(HTMLElement);
+    expect(maximizeButton).toBeInstanceOf(HTMLButtonElement);
+    expect(resizeHandle).toBeNull();
 
     const maximizeHandler = vi.fn();
     workspace.addEventListener('workspace:window-maximize-change', maximizeHandler);
 
-    storageMocks.persist.mockClear();
-
-    maximizeButton.click();
-
-    await flushPromises();
-    await flushPromises();
-
-    expect(maximizeHandler).toHaveBeenCalledTimes(1);
-
-    const firstDetail = maximizeHandler.mock.calls[0][0].detail;
-    expect(firstDetail.file).toBe(file);
-    expect(firstDetail.maximized).toBe(true);
-    expect(firstDetail.restoreLeft).toBeCloseTo(initialLeft, 6);
-    expect(firstDetail.restoreTop).toBeCloseTo(initialTop, 6);
-    expect(firstDetail.restoreWidth).toBeCloseTo(initialWidth, 6);
-    expect(firstDetail.restoreHeight).toBeCloseTo(initialHeight, 6);
-    expect(firstDetail.left).toBeCloseTo(0, 6);
-    expect(firstDetail.top).toBeCloseTo(0, 6);
-    expect(windowElement.classList.contains('workspace__window--maximized')).toBe(true);
-    expect(windowElement.dataset.windowMaximized).toBe('true');
-    expect(maximizeButton.getAttribute('aria-pressed')).toBe('true');
-    expect(maximizeButton.textContent).toBe('縮小');
-    expect(resizeHandle.disabled).toBe(true);
-    expect(resizeHandle.getAttribute('aria-hidden')).toBe('true');
-    expect(parsePixels(windowElement.style.left)).toBeCloseTo(0, 6);
-    expect(parsePixels(windowElement.style.top)).toBeCloseTo(0, 6);
-    expect(parsePixels(windowElement.style.width)).toBeGreaterThan(initialWidth);
-    expect(parsePixels(windowElement.style.height)).toBeGreaterThan(initialHeight);
-
-    expect(storageMocks.persist).toHaveBeenCalled();
-
-    const firstPersist =
-      storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
-
-    if (!firstPersist) {
-      throw new Error('maximize persistence call is required');
-    }
-
-    expect(firstPersist[0].maximized).toBe(true);
-    expect(firstPersist[0].restoreLeft).toBeCloseTo(initialLeft, 6);
-    expect(firstPersist[0].restoreTop).toBeCloseTo(initialTop, 6);
-    expect(firstPersist[0].restoreWidth).toBeCloseTo(initialWidth, 6);
-    expect(firstPersist[0].restoreHeight).toBeCloseTo(initialHeight, 6);
-    expect(firstPersist[0].bookmarks).toEqual([]);
-
-    storageMocks.persist.mockClear();
-    maximizeHandler.mockClear();
-
-    maximizeButton.click();
+    expect(windowElement?.classList.contains('workspace__window--maximized')).toBe(true);
+    expect(windowElement?.dataset.windowMaximized).toBe('true');
+    expect(windowElement?.style.left).toBe('');
+    expect(windowElement?.style.top).toBe('');
+    expect(windowElement?.style.width).toBe('');
+    expect(windowElement?.style.height).toBe('');
+    expect(maximizeButton?.hidden).toBe(true);
+    expect(maximizeButton?.disabled).toBe(true);
+    expect(maximizeButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(maximizeButton?.textContent).toBe('最大化済み');
 
     await flushPromises();
+
+    const initialPersistCalls = storageMocks.persist.mock.calls.length;
+
+    maximizeButton?.click();
+
     await flushPromises();
 
-    expect(maximizeHandler).toHaveBeenCalledTimes(1);
-
-    const secondDetail = maximizeHandler.mock.calls[0][0].detail;
-    expect(secondDetail.maximized).toBe(false);
-    expect(secondDetail.left).toBeCloseTo(initialLeft, 6);
-    expect(secondDetail.top).toBeCloseTo(initialTop, 6);
-    expect(secondDetail.restoreLeft).toBeCloseTo(initialLeft, 6);
-    expect(secondDetail.restoreTop).toBeCloseTo(initialTop, 6);
-    expect(secondDetail.restoreWidth).toBeCloseTo(initialWidth, 6);
-    expect(secondDetail.restoreHeight).toBeCloseTo(initialHeight, 6);
-    expect(windowElement.classList.contains('workspace__window--maximized')).toBe(false);
-    expect(windowElement.dataset.windowMaximized).toBe('false');
-    expect(maximizeButton.getAttribute('aria-pressed')).toBe('false');
-    expect(maximizeButton.textContent).toBe('最大化');
-    expect(resizeHandle.disabled).toBe(false);
-    expect(resizeHandle.getAttribute('aria-hidden')).toBe('false');
-    expect(windowElement.style.left).toBe(`${initialLeft}px`);
-    expect(windowElement.style.top).toBe(`${initialTop}px`);
-    expect(windowElement.style.width).toBe(`${initialWidth}px`);
-    expect(windowElement.style.height).toBe(`${initialHeight}px`);
-
-    expect(storageMocks.persist).toHaveBeenCalled();
-
-    const secondPersist =
-      storageMocks.persist.mock.calls[storageMocks.persist.mock.calls.length - 1];
-
-    if (!secondPersist) {
-      throw new Error('restore persistence call is required');
-    }
-
-    expect(secondPersist[0].maximized).toBe(false);
-    expect(secondPersist[0].restoreLeft).toBeCloseTo(initialLeft, 6);
-    expect(secondPersist[0].restoreTop).toBeCloseTo(initialTop, 6);
-    expect(secondPersist[0].restoreWidth).toBeCloseTo(initialWidth, 6);
-    expect(secondPersist[0].restoreHeight).toBeCloseTo(initialHeight, 6);
-    expect(secondPersist[0].bookmarks).toEqual([]);
+    expect(maximizeHandler).not.toHaveBeenCalled();
+    expect(windowElement?.dataset.windowMaximized).toBe('true');
+    expect(storageMocks.persist.mock.calls.length).toBe(initialPersistCalls);
   });
 
   it('renames windows, updates metadata, and persists the new title', async () => {
@@ -1803,7 +1595,9 @@ describe('createWorkspace', () => {
     expect(windowElement.getAttribute('aria-label')).toBe('遭遇表 のウィンドウ');
     expect(pinButton.getAttribute('aria-label')).toBe('遭遇表 を前面に固定');
     expect(duplicateButton.getAttribute('aria-label')).toBe('遭遇表 を別ウィンドウで複製');
-    expect(maximizeButton.getAttribute('aria-label')).toBe('遭遇表 を最大化');
+    expect(maximizeButton.getAttribute('aria-label')).toBe('遭遇表 を元のサイズに戻す');
+    expect(maximizeButton.hidden).toBe(true);
+    expect(maximizeButton.disabled).toBe(true);
     expect(colorButton.getAttribute('aria-label')).toBe('遭遇表 の色を切り替え (現在: 標準)');
     expect(notesInput.getAttribute('aria-label')).toBe('遭遇表 のメモ');
     expect(pageForm.getAttribute('aria-label')).toBe('遭遇表 の表示ページを設定');
@@ -1822,8 +1616,8 @@ describe('createWorkspace', () => {
     expect(rotationLeftButton.getAttribute('aria-label')).toBe('遭遇表 を反時計回りに回転');
     expect(rotationRightButton.getAttribute('aria-label')).toBe('遭遇表 を時計回りに回転');
     expect(rotationResetButton.getAttribute('aria-label')).toBe('遭遇表 の回転をリセット');
-    expect(maximizeButton.textContent).toBe('最大化');
-    expect(maximizeButton.getAttribute('aria-pressed')).toBe('false');
+    expect(maximizeButton.textContent).toBe('最大化済み');
+    expect(maximizeButton.getAttribute('aria-pressed')).toBe('true');
     expect(renameButton.textContent).toBe('名称変更');
     expect(colorButton.textContent).toBe('色: 標準');
     expect(windowElement.dataset.windowColor).toBe('neutral');
