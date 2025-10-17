@@ -53,12 +53,8 @@ body {
   background: var(--workspace-body);
   display: flex;
   flex-direction: column;
-  gap: clamp(16px, 3vw, 32px);
-  align-items: center;
-  justify-content: flex-start;
-  overflow: auto;
-  padding: clamp(24px, 4vw, 48px) clamp(16px, 4vw, 48px);
-  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .workspace__control {
@@ -304,13 +300,14 @@ body {
 }
 
  .workspace__layout {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: clamp(20px, 3vw, 36px);
   width: 100%;
-  padding: clamp(24px, 5vw, 56px);
-  box-sizing: border-box;
+  min-height: 0;
 }
 
 @media (min-width: 960px) {
@@ -326,31 +323,31 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: clamp(16px, 2vw, 24px);
-  padding: clamp(20px, 3vw, 36px);
-  border-radius: clamp(16px, 2vw, 28px);
+  padding: clamp(24px, 4vw, 56px);
   background: linear-gradient(150deg, rgba(22, 160, 133, 0.12), transparent 65%),
     linear-gradient(320deg, rgba(22, 160, 133, 0.08), transparent 55%), var(--workspace-surface);
-  border: 1px solid var(--workspace-border);
-  box-shadow: var(--workspace-shadow-strong);
   overflow: hidden;
 }
 
 .workspace__stage-overlay {
-  margin: auto;
-  width: min(520px, 100%);
-  padding: clamp(24px, 4vw, 48px);
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: clamp(16px, 3vw, 28px);
+  width: 100%;
+  padding: clamp(24px, 4vw, 56px);
   text-align: center;
   color: var(--workspace-text-secondary);
+  z-index: 2;
+  pointer-events: none;
 }
 
 .workspace__stage-overlay > * {
-  width: 100%;
+  width: min(520px, 100%);
+  pointer-events: auto;
 }
 
 .workspace__stage-hint {
@@ -369,11 +366,15 @@ body {
   flex-direction: column;
   gap: clamp(16px, 2vw, 24px);
   width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 @media (min-width: 960px) {
   .workspace__menu-surface {
     max-width: clamp(320px, 32vw, 420px);
+    align-self: flex-start;
   }
 }
 
@@ -903,6 +904,7 @@ body {
 }
 
 .workspace__canvas {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: clamp(16px, 2vw, 24px);
