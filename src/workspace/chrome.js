@@ -48,7 +48,7 @@ function createUtilityButton(config) {
   return button;
 }
 
-export function createHeader() {
+export function createHeader({ extendMain } = {}) {
   const header = document.createElement('header');
   header.className = 'workspace__app-bar';
 
@@ -79,8 +79,27 @@ export function createHeader() {
   main.className = 'workspace__app-bar-main';
   main.append(left, center, right);
 
+  const appendNodes = (nodes) => {
+    if (!nodes) {
+      return;
+    }
+
+    const elements = Array.isArray(nodes) ? nodes : [nodes];
+    elements
+      .filter((node) => node instanceof Node)
+      .forEach((node) => {
+        main.append(node);
+      });
+  };
+
+  if (typeof extendMain === 'function') {
+    appendNodes(extendMain({ main, header }));
+  } else {
+    appendNodes(extendMain);
+  }
+
   header.append(main);
-  return header;
+  return { element: header, main };
 }
 
 export function createHint() {
