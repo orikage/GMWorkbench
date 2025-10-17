@@ -21,8 +21,6 @@ import {
   WORKSPACE_SESSION_IMPORTED_EVENT,
   WORKSPACE_MENU_CHANGE_EVENT,
   WORKSPACE_QUICK_MEMO_REQUEST_EVENT,
-  WORKSPACE_TRACK_CHANGE_EVENT,
-  WORKSPACE_VOLUME_CHANGE_EVENT,
 } from './constants.js';
 import { formatSnapshotTimestamp } from './utils.js';
 import { applyWorkspaceTheme } from './theme.js';
@@ -46,29 +44,7 @@ export function createWorkspace() {
     }
   };
 
-  const syncTrackDataset = () => {
-    const activeTrackId = menu.getActiveTrackId?.();
-
-    if (typeof activeTrackId === 'string' && activeTrackId.length > 0) {
-      workspace.dataset.activeTrack = activeTrackId;
-    } else {
-      delete workspace.dataset.activeTrack;
-    }
-  };
-
-  const syncVolumeDataset = () => {
-    const volume = menu.getVolume?.();
-
-    if (Number.isFinite(volume)) {
-      workspace.dataset.menuVolume = String(volume);
-    } else {
-      delete workspace.dataset.menuVolume;
-    }
-  };
-
   syncMenuDataset();
-  syncTrackDataset();
-  syncVolumeDataset();
 
   workspace.addEventListener(WORKSPACE_MENU_CHANGE_EVENT, (event) => {
     const id = typeof event?.detail?.id === 'string' ? event.detail.id : '';
@@ -76,26 +52,6 @@ export function createWorkspace() {
       workspace.dataset.activeMenu = id;
     } else {
       delete workspace.dataset.activeMenu;
-    }
-  });
-
-  workspace.addEventListener(WORKSPACE_TRACK_CHANGE_EVENT, (event) => {
-    const id = typeof event?.detail?.id === 'string' ? event.detail.id : '';
-
-    if (id) {
-      workspace.dataset.activeTrack = id;
-    } else {
-      delete workspace.dataset.activeTrack;
-    }
-  });
-
-  workspace.addEventListener(WORKSPACE_VOLUME_CHANGE_EVENT, (event) => {
-    const value = Number(event?.detail?.value);
-
-    if (Number.isFinite(value)) {
-      workspace.dataset.menuVolume = String(Math.round(value));
-    } else {
-      delete workspace.dataset.menuVolume;
     }
   });
 

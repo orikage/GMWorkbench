@@ -20,8 +20,6 @@ import {
   WORKSPACE_SESSION_IMPORTED_EVENT,
   WORKSPACE_QUICK_MEMO_REQUEST_EVENT,
   WORKSPACE_MENU_CHANGE_EVENT,
-  WORKSPACE_TRACK_CHANGE_EVENT,
-  WORKSPACE_VOLUME_CHANGE_EVENT,
   WINDOW_OUTLINE_JUMP_EVENT,
 } from './constants.js';
 
@@ -94,28 +92,6 @@ const CONTRACT = {
       id: {
         type: 'string',
         description: 'Identifier of the newly activated workspace menu item.',
-      },
-    },
-  },
-  [WORKSPACE_TRACK_CHANGE_EVENT]: {
-    target: 'workspace-menu',
-    bubbles: true,
-    description: 'Raised when the user selects an audio preset in the workspace menu.',
-    detail: {
-      id: {
-        type: 'string',
-        description: 'Identifier of the activated audio track preset.',
-      },
-    },
-  },
-  [WORKSPACE_VOLUME_CHANGE_EVENT]: {
-    target: 'workspace-menu',
-    bubbles: true,
-    description: 'Raised when the workspace menu volume slider is adjusted.',
-    detail: {
-      value: {
-        type: 'number',
-        description: 'Clamped master volume level between 0 and 100.',
       },
     },
   },
