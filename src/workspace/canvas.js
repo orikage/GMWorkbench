@@ -27,13 +27,14 @@ import {
   WINDOW_OUTLINE_JUMP_EVENT,
   WINDOW_PAGE_CHANGE_EVENT,
   WINDOW_PIN_TOGGLE_EVENT,
+  WINDOW_NOTES_CHANGE_EVENT,
   WINDOW_ROTATION_CHANGE_EVENT,
   WINDOW_TITLE_CHANGE_EVENT,
   WINDOW_ZOOM_CHANGE_EVENT,
   WINDOW_ZOOM_STEP,
 } from './constants.js';
+import { createBookmarksWindow } from './window-bookmarks.js';
 import { createMemoWindow } from './window-memo.js';
-import { createWindowNotes } from './window-notes.js';
 import { createWindowSearch } from './window-search.js';
 import { createWindowToolbar } from './window-toolbar.js';
 
@@ -335,18 +336,15 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       ? options.lastFocusedAt
       : openedAt;
     let hasStoredFile = options.persisted === true;
-    let bookmarksList;
-    let bookmarksEmpty;
-    let bookmarkAddButton;
-    let bookmarkPrevButton;
-    let bookmarkNextButton;
-    let notesController;
+    let bookmarksWindowEntry = null;
+    let notesWindowEntry = null;
     let searchController;
     let toolbarController;
     let outlineList;
     let outlineStatus;
     let outlineEntries = [];
-    let bookmarkStatus;
+    let lastBookmarkStatus = '';
+    let lastBookmarkStatusIsError = false;
     const sanitizeBookmarkValue = (value) => {
       if (!Number.isFinite(value)) {
         return null;
@@ -380,9 +378,12 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       typeof options.title === 'string' && options.title.trim().length > 0
         ? options.title.trim()
         : defaultTitle;
+    let windowNotes = typeof options.notes === 'string' ? options.notes : '';
     let titleInput;
     let renameButton;
     let colorButton;
+    let bookmarksWindowButton;
+    let notesWindowButton;
     let editingTitle = false;
 
     const sanitizeColor = (value) => {
@@ -514,6 +515,26 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       disposed = true;
 
+      if (bookmarksWindowEntry?.id) {
+        const entry = windowRegistry.get(bookmarksWindowEntry.id);
+
+        if (entry && typeof entry.dispose === 'function') {
+          entry.dispose({ emitClose: false });
+        }
+
+        bookmarksWindowEntry = null;
+      }
+
+      if (notesWindowEntry?.id) {
+        const entry = windowRegistry.get(notesWindowEntry.id);
+
+        if (entry && typeof entry.dispose === 'function') {
+          entry.dispose({ emitClose: false });
+        }
+
+        notesWindowEntry = null;
+      }
+
       searchController?.cancel();
       finishPointerDrag();
 
@@ -570,7 +591,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         openedAt,
         lastFocusedAt,
         title: windowTitle,
-        notes: notesController?.getContent() ?? '',
+        notes: windowNotes,
         color: windowColor,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
@@ -845,127 +866,354 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       } else {
         delete windowElement.dataset.bookmarkPrevious;
       }
+
+      if (bookmarks.length >= MAX_WINDOW_BOOKMARKS) {
+        windowElement.dataset.bookmarkCapacity = String(MAX_WINDOW_BOOKMARKS);
+      } else {
+        delete windowElement.dataset.bookmarkCapacity;
+      }
     };
 
-    const syncBookmarkControls = () => {
-      const alreadySaved = hasBookmark(currentPage);
-      const atCapacity = bookmarks.length >= MAX_WINDOW_BOOKMARKS;
+    const getBookmarkUiState = () => {
+      const currentPageValue = clampPage(currentPage);
       const nextBookmark = getNextBookmarkValue();
       const previousBookmark = getPreviousBookmarkValue();
 
-      if (bookmarkAddButton) {
-        bookmarkAddButton.disabled = alreadySaved || atCapacity;
-
-        let label = `${windowTitle} の現在のページをブックマーク`;
-
-        if (atCapacity) {
-          label = `${windowTitle} のブックマークは上限に達しました`;
-        } else if (alreadySaved) {
-          label = `${windowTitle} の ${currentPage} ページはブックマーク済み`;
-        }
-
-        bookmarkAddButton.setAttribute('aria-label', label);
-      }
-
-      if (bookmarkNextButton) {
-        const hasNext = Number.isFinite(nextBookmark);
-        bookmarkNextButton.disabled = !hasNext;
-
-        if (hasNext) {
-          bookmarkNextButton.setAttribute(
-            'aria-label',
-            `${windowTitle} の ${nextBookmark} ページのブックマークへ進む`,
-          );
-        } else {
-          bookmarkNextButton.setAttribute(
-            'aria-label',
-            `${windowTitle} には後ろ方向のブックマークがありません`,
-          );
-        }
-      }
-
-      if (bookmarkPrevButton) {
-        const hasPrevious = Number.isFinite(previousBookmark);
-        bookmarkPrevButton.disabled = !hasPrevious;
-
-        if (hasPrevious) {
-          bookmarkPrevButton.setAttribute(
-            'aria-label',
-            `${windowTitle} の ${previousBookmark} ページのブックマークへ戻る`,
-          );
-        } else {
-          bookmarkPrevButton.setAttribute(
-            'aria-label',
-            `${windowTitle} には前方向のブックマークがありません`,
-          );
-        }
-      }
-
-      syncBookmarkMetadata();
+      return {
+        bookmarks: bookmarks.slice(),
+        currentPage: Number.isFinite(currentPageValue) ? currentPageValue : null,
+        nextBookmark: Number.isFinite(nextBookmark) ? nextBookmark : null,
+        previousBookmark: Number.isFinite(previousBookmark) ? previousBookmark : null,
+        atCapacity: bookmarks.length >= MAX_WINDOW_BOOKMARKS,
+        currentIsBookmarked: Number.isFinite(currentPageValue)
+          ? hasBookmark(currentPageValue)
+          : false,
+      };
     };
 
-    const syncBookmarkStatus = (message, { isError = false } = {}) => {
-      if (!bookmarkStatus) {
+    const syncBookmarksWindow = () => {
+      if (!bookmarksWindowEntry?.controller) {
         return;
       }
 
-      bookmarkStatus.textContent = message;
-      bookmarkStatus.hidden = message.length === 0;
-      bookmarkStatus.classList.toggle(
-        'workspace__window-bookmarks-status--error',
-        isError,
-      );
-    };
+      const state = getBookmarkUiState();
 
-    const renderBookmarks = () => {
-      if (!bookmarksList || !bookmarksEmpty) {
-        return;
-      }
+      bookmarksWindowEntry.controller.sync({
+        bookmarks: state.bookmarks,
+        currentPage: state.currentPage,
+        nextBookmark: state.nextBookmark,
+        previousBookmark: state.previousBookmark,
+        atCapacity: state.atCapacity,
+        currentIsBookmarked: state.currentIsBookmarked,
+      });
 
-      bookmarksList.textContent = '';
-
-      if (bookmarks.length === 0) {
-        bookmarksEmpty.hidden = false;
-        return;
-      }
-
-      bookmarksEmpty.hidden = true;
-
-      bookmarks.forEach((page) => {
-        const item = document.createElement('li');
-        item.className = 'workspace__window-bookmarks-item';
-        item.dataset.bookmarkPage = String(page);
-
-        const jumpButton = document.createElement('button');
-        jumpButton.type = 'button';
-        jumpButton.className = 'workspace__window-bookmark-jump';
-        jumpButton.textContent = `${page}ページ目`;
-        jumpButton.setAttribute('aria-label', `${windowTitle} の ${page} ページへ移動`);
-        jumpButton.addEventListener('click', () => {
-          jumpToBookmark(page, { source: 'list' });
-        });
-
-        const removeButton = document.createElement('button');
-        removeButton.type = 'button';
-        removeButton.className = 'workspace__window-bookmark-remove';
-        removeButton.textContent = '削除';
-        removeButton.setAttribute(
-          'aria-label',
-          `${windowTitle} の ${page} ページのブックマークを削除`,
-        );
-        removeButton.addEventListener('click', () => {
-          removeBookmark(page);
-        });
-
-        item.append(jumpButton, removeButton);
-        bookmarksList.append(item);
+      bookmarksWindowEntry.controller.setStatus(lastBookmarkStatus, {
+        isError: lastBookmarkStatusIsError,
       });
     };
 
-    const syncBookmarksDisplay = () => {
-      renderBookmarks();
+    const syncBookmarksState = () => {
       syncBookmarkMetadata();
-      syncBookmarkControls();
+      syncBookmarksWindow();
+    };
+
+    const syncBookmarkStatus = (message, { isError = false } = {}) => {
+      lastBookmarkStatus = typeof message === 'string' ? message : '';
+      lastBookmarkStatusIsError = isError === true;
+      syncBookmarksWindow();
+    };
+
+    const syncNotesMetadata = () => {
+      windowElement.dataset.notesLength = String(windowNotes.length);
+    };
+
+    const updateWindowNotes = (nextContent = '') => {
+      const normalized = typeof nextContent === 'string' ? nextContent : '';
+
+      if (normalized === windowNotes) {
+        syncNotesMetadata();
+        return;
+      }
+
+      windowNotes = normalized;
+      syncNotesMetadata();
+
+      const notesEvent = new CustomEvent(WINDOW_NOTES_CHANGE_EVENT, {
+        bubbles: true,
+        detail: { file, notes: windowNotes },
+      });
+
+      windowElement.dispatchEvent(notesEvent);
+      if (notesWindowEntry?.controller?.setContent) {
+        notesWindowEntry.controller.setContent(windowNotes);
+      }
+      schedulePersist();
+    };
+
+    const getBookmarksWindowTitle = () => `${windowTitle} のブックマーク`;
+    const getNotesWindowTitle = () => `${windowTitle} のメモ`;
+
+    const openBookmarksWindow = () => {
+      if (
+        bookmarksWindowEntry?.element instanceof HTMLElement &&
+        bookmarksWindowEntry.element.isConnected
+      ) {
+        const entry = windowRegistry.get(bookmarksWindowEntry.id);
+
+        if (entry && typeof entry.bringToFront === 'function') {
+          entry.bringToFront();
+        }
+
+        bookmarksWindowEntry.element.focus({ preventScroll: true });
+        syncBookmarksWindow();
+        return bookmarksWindowEntry.element;
+      }
+
+      let disposeBookmarksWindow = () => {};
+
+      const controller = createBookmarksWindow({
+        title: getBookmarksWindowTitle(),
+        onCloseRequest: () => {
+          disposeBookmarksWindow({ emitClose: true });
+        },
+        onAddBookmark: () => {
+          bringToFront();
+          addBookmark(currentPage);
+        },
+        onJumpBookmark: (page) => {
+          bringToFront();
+          jumpToBookmark(page, { source: 'list' });
+        },
+        onRemoveBookmark: (page) => {
+          bringToFront();
+          removeBookmark(page);
+        },
+        onNextRequest: () => {
+          bringToFront();
+          goToNextBookmark({ source: 'next-button' });
+        },
+        onPreviousRequest: () => {
+          bringToFront();
+          goToPreviousBookmark({ source: 'previous-button' });
+        },
+      });
+
+      const windowElement = controller?.element;
+
+      if (!(windowElement instanceof HTMLElement)) {
+        throw new Error('ブックマークウィンドウの生成に失敗しました。');
+      }
+
+      const bookmarksWindowId = createWindowId('bookmarks');
+
+      windowElement.classList.add('workspace__window');
+      windowElement.classList.add('workspace__window--bookmarks');
+      windowElement.dataset.windowId = bookmarksWindowId;
+      windowElement.dataset.windowType = 'bookmarks';
+      windowElement.dataset.windowParentId = windowId;
+      windowElement.tabIndex = 0;
+
+      const header = controller?.header;
+
+      if (!(header instanceof HTMLElement)) {
+        throw new Error('ブックマークウィンドウにはヘッダー要素が必要です。');
+      }
+
+      let disposed = false;
+      let openedAt = Date.now();
+      let lastFocusedAt = openedAt;
+
+      const syncFocusMetadata = () => {
+        windowElement.dataset.openedAt = String(openedAt);
+        windowElement.dataset.lastFocusedAt = String(lastFocusedAt);
+      };
+
+      const applyInitialBounds = () => {
+        const preferredWidth = 320;
+        const preferredHeight = 360;
+        const offset = computeDefaultWindowPosition(preferredWidth, preferredHeight);
+        const clamped = clampBoundsToArea({
+          left: offset.left,
+          top: offset.top,
+          width: preferredWidth,
+          height: preferredHeight,
+        });
+
+        windowElement.style.left = `${clamped.left}px`;
+        windowElement.style.top = `${clamped.top}px`;
+        windowElement.style.width = `${clamped.width}px`;
+        windowElement.style.height = `${clamped.height}px`;
+        windowElement.dataset.windowLeft = String(clamped.left);
+        windowElement.dataset.windowTop = String(clamped.top);
+        windowElement.dataset.windowWidth = String(clamped.width);
+        windowElement.dataset.windowHeight = String(clamped.height);
+      };
+
+      applyInitialBounds();
+      syncFocusMetadata();
+
+      const applyZIndex = () => {
+        const next = getNextZIndex();
+        windowElement.style.zIndex = String(next);
+        windowElement.dataset.windowZIndex = String(next);
+      };
+
+      applyZIndex();
+
+      const bringToFrontWindow = ({ persistFocus = true } = {}) => {
+        area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
+          if (otherWindow !== windowElement) {
+            otherWindow.classList.remove('workspace__window--active');
+            otherWindow.dataset.windowActive = 'false';
+          }
+        });
+
+        applyZIndex();
+        windowElement.classList.add('workspace__window--active');
+        windowElement.dataset.windowActive = 'true';
+        area.dataset.activeWindowId = bookmarksWindowId;
+
+        if (persistFocus) {
+          lastFocusedAt = Date.now();
+        }
+
+        syncFocusMetadata();
+        return windowElement;
+      };
+
+      if (typeof controller?.setFocusDelegate === 'function') {
+        controller.setFocusDelegate(() => {
+          bringToFrontWindow({ persistFocus: false });
+        });
+      }
+
+      const handleWindowFocus = () => {
+        bringToFrontWindow();
+      };
+
+      const handleWindowMouseDown = () => {
+        bringToFrontWindow();
+        windowElement.focus({ preventScroll: true });
+      };
+
+      const handleHeaderInteraction = () => {
+        bringToFrontWindow();
+      };
+
+      header.addEventListener('mousedown', handleHeaderInteraction);
+
+      const cleanup = () => {
+        header.removeEventListener('mousedown', handleHeaderInteraction);
+        windowElement.removeEventListener('focus', handleWindowFocus);
+        windowElement.removeEventListener('mousedown', handleWindowMouseDown);
+      };
+
+      disposeBookmarksWindow = ({ emitClose = true } = {}) => {
+        if (disposed) {
+          return;
+        }
+
+        disposed = true;
+        cleanup();
+        windowElement.remove();
+        windowRegistry.delete(bookmarksWindowId);
+        bookmarksWindowEntry = null;
+        syncEmptyState();
+
+        if (emitClose) {
+          // no-op
+        }
+      };
+
+      windowElement.addEventListener('focus', handleWindowFocus);
+      windowElement.addEventListener('mousedown', handleWindowMouseDown);
+      area.append(windowElement);
+
+      windowRegistry.set(bookmarksWindowId, {
+        element: windowElement,
+        bringToFront: bringToFrontWindow,
+        dispose: ({ emitClose = true } = {}) => {
+          disposeBookmarksWindow({ emitClose });
+        },
+        getLastFocused: () => lastFocusedAt,
+        getOpenedAt: () => openedAt,
+        getTitle: () => getBookmarksWindowTitle(),
+        id: bookmarksWindowId,
+      });
+
+      bookmarksWindowEntry = {
+        id: bookmarksWindowId,
+        element: windowElement,
+        controller,
+      };
+
+      syncEmptyState();
+      bringToFrontWindow();
+      syncBookmarksWindow();
+
+      return windowElement;
+    };
+
+    const openNotesWindow = () => {
+      if (notesWindowEntry?.element instanceof HTMLElement && notesWindowEntry.element.isConnected) {
+        const entry = windowRegistry.get(notesWindowEntry.id);
+
+        if (entry && typeof entry.bringToFront === 'function') {
+          entry.bringToFront();
+        }
+
+        if (notesWindowEntry.controller?.setContent) {
+          notesWindowEntry.controller.setContent(windowNotes);
+        }
+
+        notesWindowEntry.element.focus({ preventScroll: true });
+        return notesWindowEntry.element;
+      }
+
+      const result = openMemoWindow({
+        returnController: true,
+        title: getNotesWindowTitle(),
+        content: windowNotes,
+        onContentChange: (value) => {
+          updateWindowNotes(value);
+        },
+        onDispose: () => {
+          notesWindowEntry = null;
+        },
+      });
+
+      if (!result) {
+        return null;
+      }
+
+      const memoElement = result.element;
+      const memoController = result.controller;
+
+      if (!(memoElement instanceof HTMLElement)) {
+        return null;
+      }
+
+      const memoWindowId = memoElement.dataset?.windowId;
+
+      if (typeof memoWindowId === 'string' && memoWindowId.length > 0) {
+        memoElement.dataset.windowParentId = windowId;
+      }
+
+      if (memoController?.setTitle) {
+        memoController.setTitle(getNotesWindowTitle());
+      }
+
+      if (memoController?.setContent) {
+        memoController.setContent(windowNotes);
+      }
+
+      notesWindowEntry = {
+        id: typeof memoWindowId === 'string' ? memoWindowId : undefined,
+        element: memoElement,
+        controller: memoController,
+      };
+
+      return memoElement;
     };
 
     const clampBookmarksToBounds = () => {
@@ -999,18 +1247,10 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       if (changed) {
         bookmarks = deduped;
-
-        if (bookmarksList) {
-          syncBookmarksDisplay();
-        } else {
-          syncBookmarkMetadata();
-        }
-
+        syncBookmarksState();
         schedulePersist();
-      } else if (bookmarksList) {
-        syncBookmarkControls();
       } else {
-        syncBookmarkMetadata();
+        syncBookmarksState();
       }
     };
 
@@ -1024,19 +1264,19 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       if (bookmarks.length >= MAX_WINDOW_BOOKMARKS) {
         syncBookmarkStatus('ブックマークは上限に達しました。', { isError: true });
-        syncBookmarkControls();
+        syncBookmarksState();
         return false;
       }
 
       if (hasBookmark(target)) {
         syncBookmarkStatus(`${target}ページ目はすでに保存済みです。`, { isError: true });
-        syncBookmarkControls();
+        syncBookmarksState();
         return false;
       }
 
       bookmarks.push(target);
       bookmarks.sort((a, b) => a - b);
-      syncBookmarksDisplay();
+      syncBookmarksState();
 
       const change = new CustomEvent(WINDOW_BOOKMARKS_CHANGE_EVENT, {
         bubbles: true,
@@ -1058,7 +1298,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
 
       bookmarks.splice(index, 1);
-      syncBookmarksDisplay();
+      syncBookmarksState();
 
       const change = new CustomEvent(WINDOW_BOOKMARKS_CHANGE_EVENT, {
         bubbles: true,
@@ -1114,7 +1354,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       if (!Number.isFinite(nextBookmark)) {
         syncBookmarkStatus('後ろのブックマークはありません。', { isError: true });
-        syncBookmarkControls();
+        syncBookmarksState();
         return false;
       }
 
@@ -1126,7 +1366,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       if (!Number.isFinite(previousBookmark)) {
         syncBookmarkStatus('前のブックマークはありません。', { isError: true });
-        syncBookmarkControls();
+        syncBookmarksState();
         return false;
       }
 
@@ -1147,7 +1387,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       windowElement.dataset.pageHistoryIndex = String(pageHistoryIndex);
       windowElement.dataset.pageHistoryLength = String(pageHistory.length);
-      syncBookmarkControls();
+      syncBookmarksState();
     };
 
     const clampZoom = (value) => {
@@ -1655,6 +1895,31 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     duplicateButton.textContent = '複製';
     duplicateButton.setAttribute('aria-label', `${windowTitle} を別ウィンドウで複製`);
 
+    bookmarksWindowButton = document.createElement('button');
+    bookmarksWindowButton.type = 'button';
+    bookmarksWindowButton.className =
+      'workspace__window-duplicate workspace__window-open-bookmarks';
+    bookmarksWindowButton.textContent = 'ブックマーク';
+    bookmarksWindowButton.addEventListener('click', () => {
+      bringToFront();
+      openBookmarksWindow();
+    });
+    bookmarksWindowButton.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
+    notesWindowButton = document.createElement('button');
+    notesWindowButton.type = 'button';
+    notesWindowButton.className = 'workspace__window-duplicate workspace__window-open-notes';
+    notesWindowButton.textContent = 'メモ';
+    notesWindowButton.addEventListener('click', () => {
+      bringToFront();
+      openNotesWindow();
+    });
+    notesWindowButton.addEventListener('focus', () => {
+      bringToFront({ persistFocus: false });
+    });
+
     const getColorDefinition = () => {
       const match = WINDOW_COLORS.find((color) => color.id === windowColor);
       return match ?? WINDOW_COLORS[0];
@@ -1716,7 +1981,22 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       pinButton.setAttribute('aria-label', `${windowTitle} を前面に固定`);
       duplicateButton.setAttribute('aria-label', `${windowTitle} を別ウィンドウで複製`);
 
-      notesController?.updateTitle(windowTitle);
+      if (bookmarksWindowButton) {
+        bookmarksWindowButton.setAttribute('aria-label', `${windowTitle} のブックマークを表示`);
+      }
+
+      if (notesWindowButton) {
+        notesWindowButton.setAttribute('aria-label', `${windowTitle} のメモを表示`);
+      }
+
+      if (bookmarksWindowEntry?.controller) {
+        bookmarksWindowEntry.controller.updateTitle(getBookmarksWindowTitle());
+      }
+
+      if (notesWindowEntry?.controller?.setTitle) {
+        notesWindowEntry.controller.setTitle(getNotesWindowTitle());
+      }
+
       toolbarController?.updateLabels(windowTitle);
 
       if (maximizeButton) {
@@ -1728,10 +2008,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       if (resizeHandle) {
         resizeHandle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
-      }
-
-      if (bookmarkAddButton) {
-        syncBookmarkControls();
       }
 
       syncColorButton();
@@ -1747,7 +2023,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       titleInput.placeholder = windowTitle;
       windowElement.dataset.windowTitle = windowTitle;
       syncControlLabels();
-      syncBookmarksDisplay();
+      syncBookmarksState();
     };
 
     const finishTitleEdit = ({ commit }) => {
@@ -1838,7 +2114,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         rotation: currentRotation,
         totalPages,
         pinned: isPinned(),
-        notes: notesController?.getContent() ?? '',
+        notes: windowNotes,
         title: windowTitle,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
@@ -1869,7 +2145,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
           totalPages,
           sourceId: windowId,
           duplicateId: duplicateElement.dataset?.windowId,
-          notes: notesController?.getContent() ?? '',
+          notes: windowNotes,
           title: windowTitle,
           color: windowColor,
           maximized: isMaximized,
@@ -1902,6 +2178,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       pinButton,
       maximizeButton,
       duplicateButton,
+      bookmarksWindowButton,
+      notesWindowButton,
       closeButton,
     );
     header.append(titleGroup, controls);
@@ -1937,86 +2215,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     });
     const searchSection = searchController.element;
 
-    const bookmarksSection = document.createElement('section');
-    bookmarksSection.className = 'workspace__window-bookmarks';
-
-    const bookmarksHeader = document.createElement('div');
-    bookmarksHeader.className = 'workspace__window-bookmarks-header';
-
-    const bookmarksLabel = document.createElement('span');
-    bookmarksLabel.className = 'workspace__window-bookmarks-label';
-    bookmarksLabel.textContent = 'ブックマーク';
-
-    const bookmarksControls = document.createElement('div');
-    bookmarksControls.className = 'workspace__window-bookmarks-controls';
-
-    bookmarkPrevButton = document.createElement('button');
-    bookmarkPrevButton.type = 'button';
-    bookmarkPrevButton.className = 'workspace__window-bookmark-prev';
-    bookmarkPrevButton.textContent = '前のブックマーク';
-    bookmarkPrevButton.addEventListener('click', () => {
-      bringToFront();
-      goToPreviousBookmark({ source: 'previous-button' });
-    });
-    bookmarkPrevButton.addEventListener('focus', () => {
-      bringToFront({ persistFocus: false });
-    });
-
-    bookmarkAddButton = document.createElement('button');
-    bookmarkAddButton.type = 'button';
-    bookmarkAddButton.className = 'workspace__window-bookmark-add';
-    bookmarkAddButton.textContent = 'このページを記憶';
-    bookmarkAddButton.addEventListener('click', () => {
-      bringToFront();
-      addBookmark(currentPage);
-    });
-    bookmarkAddButton.addEventListener('focus', () => {
-      bringToFront({ persistFocus: false });
-    });
-
-    bookmarkNextButton = document.createElement('button');
-    bookmarkNextButton.type = 'button';
-    bookmarkNextButton.className = 'workspace__window-bookmark-next';
-    bookmarkNextButton.textContent = '次のブックマーク';
-    bookmarkNextButton.addEventListener('click', () => {
-      bringToFront();
-      goToNextBookmark({ source: 'next-button' });
-    });
-    bookmarkNextButton.addEventListener('focus', () => {
-      bringToFront({ persistFocus: false });
-    });
-
-    bookmarksControls.append(
-      bookmarkPrevButton,
-      bookmarkAddButton,
-      bookmarkNextButton,
-    );
-
-    bookmarksHeader.append(bookmarksLabel, bookmarksControls);
-
-    bookmarkStatus = document.createElement('p');
-    bookmarkStatus.className = 'workspace__window-bookmarks-status';
-    bookmarkStatus.hidden = true;
-
-    bookmarksEmpty = document.createElement('p');
-    bookmarksEmpty.className = 'workspace__window-bookmarks-empty';
-    bookmarksEmpty.textContent = 'ブックマークはまだありません。';
-
-    bookmarksList = document.createElement('ul');
-    bookmarksList.className = 'workspace__window-bookmarks-list';
-    bookmarksList.setAttribute('role', 'list');
-
-    bookmarksSection.append(bookmarksHeader, bookmarkStatus, bookmarksEmpty, bookmarksList);
-
-    notesController = createWindowNotes({
-      file,
-      windowElement,
-      initialContent: typeof options.notes === 'string' ? options.notes : '',
-      bringToFront,
-      onPersistRequest: () => schedulePersist(),
-    });
-    const notesSection = notesController.element;
-
     const outlineSection = document.createElement('section');
     outlineSection.className = 'workspace__window-outline';
 
@@ -2040,20 +2238,13 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     outlineSection.append(outlineHeader, outlineStatus, outlineList);
     syncOutlineMetadata();
 
-    body.append(
-      toolbar,
-      searchSection,
-      outlineSection,
-      viewer.element,
-      bookmarksSection,
-      notesSection,
-    );
+    body.append(toolbar, searchSection, outlineSection, viewer.element);
 
+    syncNotesMetadata();
     clampBookmarksToBounds();
-    syncBookmarksDisplay();
+    syncBookmarksState();
     syncNavigationState();
     syncZoomState();
-    notesController.sync();
     updateViewerState();
 
     void viewer
@@ -2361,6 +2552,14 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       onCloseRequest: () => {
         disposeWindow({ emitClose: true });
       },
+      onContentChange:
+        typeof options.onContentChange === 'function'
+          ? (value) => {
+              options.onContentChange(value);
+            }
+          : undefined,
+      onTitleChange:
+        typeof options.onTitleChange === 'function' ? options.onTitleChange : undefined,
     });
 
     const windowElement = memoController?.element;
@@ -2481,6 +2680,10 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       if (emitClose) {
         // Memo windows are lightweight; no persistence is attempted.
       }
+
+      if (typeof options.onDispose === 'function') {
+        options.onDispose();
+      }
     };
 
     windowElement.addEventListener('focus', handleWindowFocus);
@@ -2511,6 +2714,16 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
     } else {
       windowElement.dataset.windowActive = 'false';
+    }
+
+    if (options.returnController === true) {
+      return {
+        element: windowElement,
+        controller: memoController,
+        dispose: ({ emitClose = true } = {}) => {
+          disposeWindow({ emitClose });
+        },
+      };
     }
 
     return windowElement;
