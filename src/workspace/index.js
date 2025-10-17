@@ -607,7 +607,7 @@ export function createWorkspace() {
   logNote.textContent = '保存データの書き出し・読み込みとキャッシュ管理を行えます。';
   registerPanel('log', [logNote, maintenance.element]);
 
-  layout.append(menuSurface);
+  header.append(menuSurface);
   workspace.append(header, stage);
 
   if (layersOverlay?.element instanceof HTMLElement) {
