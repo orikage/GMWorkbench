@@ -7,6 +7,7 @@ import {
   loadWorkspacePreferences,
   persistWorkspacePreference,
   persistWorkspaceWindow,
+  loadWorkspaceWindows,
 } from './workspace-storage.js';
 
 const originalIndexedDB = globalThis.indexedDB;
@@ -178,6 +179,41 @@ describe('workspace-storage snapshots', () => {
     expect(result.windows).toBe(1);
     expect(result.payload.windows).toHaveLength(1);
     expect(result.payload.windows[0].id).toBe('window-b');
+  });
+
+  it('persists and restores positional metadata for workspace windows', async () => {
+    const file = new File(['position'], 'position.pdf', { type: 'application/pdf' });
+
+    await persistWorkspaceWindow(
+      {
+        id: 'window-position',
+        file,
+        left: 120,
+        top: 48,
+        width: 480,
+        height: 360,
+        restoreLeft: 80,
+        restoreTop: 32,
+        restoreWidth: 420,
+        restoreHeight: 300,
+      },
+      { includeFile: true },
+    );
+
+    const windows = await loadWorkspaceWindows();
+
+    expect(windows).toHaveLength(1);
+
+    const [windowState] = windows;
+
+    expect(windowState.left).toBe(120);
+    expect(windowState.top).toBe(48);
+    expect(windowState.width).toBe(480);
+    expect(windowState.height).toBe(360);
+    expect(windowState.restoreLeft).toBe(80);
+    expect(windowState.restoreTop).toBe(32);
+    expect(windowState.restoreWidth).toBe(420);
+    expect(windowState.restoreHeight).toBe(300);
   });
 });
 

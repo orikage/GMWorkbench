@@ -928,15 +928,17 @@ body {
 
 
 .workspace__windows {
+  position: relative;
   flex: 1 1 auto;
-  min-height: 0;
   width: 100%;
-  display: flex;
-  flex-direction: column;
+  min-height: clamp(420px, 60vh, 880px);
+  overflow: hidden;
 }
 
 .workspace__window {
-  display: none;
+  position: absolute;
+  inset: auto;
+  display: grid;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -948,11 +950,12 @@ body {
   overflow: hidden;
   transition: box-shadow 150ms ease;
   grid-template-rows: auto 1fr;
+  z-index: 1;
 }
 
 .workspace__window--active {
-  display: grid;
   box-shadow: var(--workspace-shadow-strong);
+  z-index: 20;
 }
 
 .workspace__window:focus-visible {
@@ -981,12 +984,17 @@ body {
   padding: 16px 20px;
   border-bottom: 1px solid var(--workspace-border);
   background: var(--workspace-panel);
-  cursor: default;
+  cursor: move;
+  user-select: none;
 }
 
 .workspace__window--renaming .workspace__window-header,
 .workspace__window--renaming .workspace__window-header:active {
   cursor: text;
+}
+
+.workspace__window--dragging .workspace__window-header {
+  cursor: grabbing;
 }
 
 .workspace__window-title-group {
