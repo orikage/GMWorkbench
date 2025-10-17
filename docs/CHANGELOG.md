@@ -9,6 +9,7 @@
 4. 最新の一覧が必要なときは `docs/changelog/` を参照するか、`pnpm run docs:print:changelog` などの補助スクリプトで収集してください（スクリプトは任意）。
 
 ## 既存エントリ
+- [2025-10-17 — pnpm ワークスペース設定の明示](changelog/2025-10-17-pnpm-workspace-packages.md)
 - [2025-10-16 — pnpm のビルドスクリプト許可](changelog/2025-10-16-pnpm-allow-esbuild.md)
 - [2025-10-12 — タスク Issue 同期ワークフロー](changelog/2025-10-12-task-issue-workflow.md)
 - [2025-10-12 — キャンバス内部ロジックの分割](changelog/2025-10-12-canvas-modules.md)
