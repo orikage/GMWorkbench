@@ -59,9 +59,15 @@ async function ensureBuild() {
   await run(pnpmCommand, ['build']);
 }
 
+async function ensureBrowsers() {
+  console.log('Ensuring Playwright browser binaries and required dependencies are installed...');
+  await run(pnpmCommand, ['exec', 'playwright', 'install', '--with-deps', 'chromium']);
+}
+
 async function main() {
   try {
     await ensureBuild();
+    await ensureBrowsers();
     const extraArgs = process.argv.slice(2);
     await run(pnpmCommand, ['exec', 'playwright', 'test', ...extraArgs]);
   } catch (error) {
