@@ -75,7 +75,11 @@ export function createHeader() {
     right.append(createUtilityButton(entry));
   });
 
-  header.append(left, center, right);
+  const main = document.createElement('div');
+  main.className = 'workspace__app-bar-main';
+  main.append(left, center, right);
+
+  header.append(main);
   return header;
 }
 

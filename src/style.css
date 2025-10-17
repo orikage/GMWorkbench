@@ -110,13 +110,22 @@ body {
 
 .workspace__app-bar {
   display: flex;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(16px, 2vw, 24px);
   padding: 16px 24px;
   border-radius: calc(var(--workspace-corner-radius) * 1.5);
   background: var(--workspace-surface);
   border: 1px solid var(--workspace-border);
   box-shadow: var(--workspace-shadow-soft);
+}
+
+.workspace__app-bar-main {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 2vw, 24px);
+  flex-wrap: wrap;
+  width: 100%;
 }
 
 .workspace__layers {
@@ -361,27 +370,11 @@ body {
 }
 
 .workspace__menu-surface {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: clamp(16px, 2vw, 24px);
-  width: 100%;
-  min-height: 0;
-  max-height: 100%;
-  overflow-y: auto;
-}
-
-@media (min-width: 960px) {
-  .workspace__menu-surface {
-    max-width: clamp(320px, 32vw, 420px);
-    align-self: flex-start;
-  }
-}
-
-@media (min-width: 1280px) {
-  .workspace__menu-surface {
-    max-width: clamp(360px, 28vw, 480px);
-  }
+  padding-top: clamp(12px, 2vw, 18px);
+  border-top: 1px solid var(--workspace-border);
 }
 
 .workspace__menu-panels {
