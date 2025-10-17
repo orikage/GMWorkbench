@@ -2,6 +2,7 @@ import {
   DEFAULT_WINDOW_ROTATION,
   DEFAULT_WINDOW_ZOOM,
   MAX_WINDOW_ZOOM,
+  MIN_WINDOW_WIDTH,
   MIN_WINDOW_ZOOM,
   WINDOW_ZOOM_STEP,
 } from './constants.js';
@@ -89,7 +90,7 @@ export function createWindowToolbar({
   const historyBackButton = document.createElement('button');
   historyBackButton.type = 'button';
   historyBackButton.className = 'workspace__window-nav workspace__window-nav--history-back';
-  historyBackButton.textContent = '戻';
+  historyBackButton.textContent = '↶';
   historyBackButton.addEventListener('click', () => {
     navigateHistory(-1);
   });
@@ -97,7 +98,7 @@ export function createWindowToolbar({
   const prevButton = document.createElement('button');
   prevButton.type = 'button';
   prevButton.className = 'workspace__window-nav workspace__window-nav--previous';
-  prevButton.textContent = '−';
+  prevButton.textContent = '◀';
   prevButton.addEventListener('click', () => {
     stepPage(-1);
   });
@@ -105,7 +106,7 @@ export function createWindowToolbar({
   const nextButton = document.createElement('button');
   nextButton.type = 'button';
   nextButton.className = 'workspace__window-nav workspace__window-nav--next';
-  nextButton.textContent = '+';
+  nextButton.textContent = '▶';
   nextButton.addEventListener('click', () => {
     stepPage(1);
   });
@@ -113,7 +114,7 @@ export function createWindowToolbar({
   const historyForwardButton = document.createElement('button');
   historyForwardButton.type = 'button';
   historyForwardButton.className = 'workspace__window-nav workspace__window-nav--history-forward';
-  historyForwardButton.textContent = '進';
+  historyForwardButton.textContent = '↷';
   historyForwardButton.addEventListener('click', () => {
     navigateHistory(1);
   });
@@ -157,7 +158,7 @@ export function createWindowToolbar({
   rotateLeftButton.type = 'button';
   rotateLeftButton.className =
     'workspace__window-rotation-control workspace__window-rotation-control--left';
-  rotateLeftButton.textContent = '↺';
+  rotateLeftButton.textContent = '⟲';
   rotateLeftButton.addEventListener('click', () => {
     stepRotation(-1);
   });
@@ -170,7 +171,7 @@ export function createWindowToolbar({
   rotateRightButton.type = 'button';
   rotateRightButton.className =
     'workspace__window-rotation-control workspace__window-rotation-control--right';
-  rotateRightButton.textContent = '↻';
+  rotateRightButton.textContent = '⟳';
   rotateRightButton.addEventListener('click', () => {
     stepRotation(1);
   });
@@ -183,7 +184,13 @@ export function createWindowToolbar({
     resetRotation();
   });
 
-  rotationGroup.append(rotateLeftButton, rotationDisplay, rotateRightButton, rotateResetButton);
+  const rotationSegment = document.createElement('div');
+  rotationSegment.className =
+    'workspace__window-toolbar-segment workspace__window-toolbar-segment--rotation';
+  rotationSegment.setAttribute('role', 'group');
+  rotationSegment.setAttribute('aria-label', '回転操作');
+  rotationSegment.append(rotateLeftButton, rotationDisplay, rotateRightButton, rotateResetButton);
+  rotationGroup.append(rotationSegment);
 
   const zoomGroup = document.createElement('div');
   zoomGroup.className = 'workspace__window-zoom';
@@ -191,7 +198,7 @@ export function createWindowToolbar({
   const zoomOutButton = document.createElement('button');
   zoomOutButton.type = 'button';
   zoomOutButton.className = 'workspace__window-zoom-control workspace__window-zoom-control--out';
-  zoomOutButton.textContent = '縮小';
+  zoomOutButton.textContent = '−';
   zoomOutButton.addEventListener('click', () => {
     stepZoom(-WINDOW_ZOOM_STEP);
   });
@@ -203,7 +210,7 @@ export function createWindowToolbar({
   const zoomInButton = document.createElement('button');
   zoomInButton.type = 'button';
   zoomInButton.className = 'workspace__window-zoom-control workspace__window-zoom-control--in';
-  zoomInButton.textContent = '拡大';
+  zoomInButton.textContent = '+';
   zoomInButton.addEventListener('click', () => {
     stepZoom(WINDOW_ZOOM_STEP);
   });
@@ -219,7 +226,7 @@ export function createWindowToolbar({
   const zoomFitWidthButton = document.createElement('button');
   zoomFitWidthButton.type = 'button';
   zoomFitWidthButton.className = 'workspace__window-zoom-fit workspace__window-zoom-fit--width';
-  zoomFitWidthButton.textContent = '幅合わせ';
+  zoomFitWidthButton.textContent = '⟷';
   zoomFitWidthButton.setAttribute('aria-pressed', 'false');
   zoomFitWidthButton.addEventListener('click', () => {
     const target = computeFitZoom('width');
@@ -232,7 +239,7 @@ export function createWindowToolbar({
   const zoomFitPageButton = document.createElement('button');
   zoomFitPageButton.type = 'button';
   zoomFitPageButton.className = 'workspace__window-zoom-fit workspace__window-zoom-fit--page';
-  zoomFitPageButton.textContent = '全体表示';
+  zoomFitPageButton.textContent = '⤢';
   zoomFitPageButton.setAttribute('aria-pressed', 'false');
   zoomFitPageButton.addEventListener('click', () => {
     const target = computeFitZoom('page');
@@ -242,30 +249,55 @@ export function createWindowToolbar({
     }
   });
 
-  zoomGroup.append(
-    zoomOutButton,
-    zoomDisplay,
-    zoomInButton,
-    zoomResetButton,
-    zoomFitWidthButton,
-    zoomFitPageButton,
-  );
+  const zoomPrimarySegment = document.createElement('div');
+  zoomPrimarySegment.className =
+    'workspace__window-toolbar-segment workspace__window-toolbar-segment--zoom';
+  zoomPrimarySegment.setAttribute('role', 'group');
+  zoomPrimarySegment.setAttribute('aria-label', '倍率調整');
+  zoomPrimarySegment.append(zoomOutButton, zoomDisplay, zoomInButton);
 
-  const adjustmentsGroup = document.createElement('div');
-  adjustmentsGroup.className = 'workspace__window-adjustments';
-  adjustmentsGroup.append(rotationGroup, zoomGroup);
+  const zoomSecondarySegment = document.createElement('div');
+  zoomSecondarySegment.className =
+    'workspace__window-toolbar-segment workspace__window-toolbar-segment--zoom-options';
+  zoomSecondarySegment.setAttribute('role', 'group');
+  zoomSecondarySegment.setAttribute('aria-label', 'ページ合わせ');
+  zoomSecondarySegment.append(zoomResetButton, zoomFitWidthButton, zoomFitPageButton);
 
-  toolbar.append(
-    firstPageButton,
-    historyBackButton,
-    prevButton,
-    pageForm,
-    pageSlider,
-    nextButton,
-    historyForwardButton,
-    lastPageButton,
-    adjustmentsGroup,
-  );
+  zoomGroup.append(zoomPrimarySegment, zoomSecondarySegment);
+
+  const navigationCluster = document.createElement('div');
+  navigationCluster.className =
+    'workspace__window-toolbar-cluster workspace__window-toolbar-cluster--navigation';
+
+  const navBackSegment = document.createElement('div');
+  navBackSegment.className =
+    'workspace__window-toolbar-segment workspace__window-toolbar-segment--nav-back';
+  navBackSegment.setAttribute('role', 'group');
+  navBackSegment.setAttribute('aria-label', 'ページ移動 (戻る)');
+  navBackSegment.append(firstPageButton, historyBackButton, prevButton);
+
+  const pageControlsSegment = document.createElement('div');
+  pageControlsSegment.className =
+    'workspace__window-toolbar-segment workspace__window-toolbar-segment--page';
+  pageControlsSegment.setAttribute('role', 'group');
+  pageControlsSegment.setAttribute('aria-label', 'ページ指定');
+  pageControlsSegment.append(pageForm, pageSlider);
+
+  const navForwardSegment = document.createElement('div');
+  navForwardSegment.className =
+    'workspace__window-toolbar-segment workspace__window-toolbar-segment--nav-forward';
+  navForwardSegment.setAttribute('role', 'group');
+  navForwardSegment.setAttribute('aria-label', 'ページ移動 (進む)');
+  navForwardSegment.append(nextButton, historyForwardButton, lastPageButton);
+
+  navigationCluster.append(navBackSegment, pageControlsSegment, navForwardSegment);
+
+  const adjustmentsCluster = document.createElement('div');
+  adjustmentsCluster.className =
+    'workspace__window-toolbar-cluster workspace__window-toolbar-cluster--adjustments';
+  adjustmentsCluster.append(rotationGroup, zoomGroup);
+
+  toolbar.append(navigationCluster, adjustmentsCluster);
 
   const syncNavigation = ({
     currentPage,
@@ -397,6 +429,70 @@ export function createWindowToolbar({
       setControlLabel(rotateResetButton, '');
     }
   };
+
+  const parseMinimumWidth = () => {
+    if (!(windowElement instanceof Element)) {
+      return MIN_WINDOW_WIDTH;
+    }
+
+    const inlineValue = Number.parseFloat(windowElement.style?.minWidth ?? '');
+
+    if (Number.isFinite(inlineValue)) {
+      return inlineValue;
+    }
+
+    if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+      const computed = window.getComputedStyle(windowElement)?.minWidth;
+      const parsed = Number.parseFloat(computed);
+
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return MIN_WINDOW_WIDTH;
+  };
+
+  const getCompactThreshold = () => parseMinimumWidth() + 80;
+
+  const applyCompactMode = (width) => {
+    if (!Number.isFinite(width) || width <= 1) {
+      return;
+    }
+
+    const compact = width <= getCompactThreshold();
+    toolbar.classList.toggle('workspace__window-toolbar--compact', compact);
+  };
+
+  const updateCompactMode = () => {
+    if (!(windowElement instanceof Element) ||
+      typeof windowElement.getBoundingClientRect !== 'function') {
+      return;
+    }
+
+    const bounds = windowElement.getBoundingClientRect();
+    applyCompactMode(bounds?.width);
+  };
+
+  updateCompactMode();
+
+  if (typeof ResizeObserver === 'function' && windowElement instanceof Element) {
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry?.target === windowElement) {
+          const width = entry?.contentRect?.width;
+
+          if (Number.isFinite(width)) {
+            applyCompactMode(width);
+          } else {
+            updateCompactMode();
+          }
+        }
+      }
+    });
+
+    resizeObserver.observe(windowElement);
+  }
 
   return {
     element: toolbar,
