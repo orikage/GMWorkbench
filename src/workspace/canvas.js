@@ -152,48 +152,34 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     return zIndexCounter;
   };
 
-  const openWindow = (file, options = {}) => {
-    let zoomFitMode = 'manual';
-    const windowElement = document.createElement('article');
-    windowElement.className = 'workspace__window';
-    windowElement.setAttribute('role', 'group');
-    windowElement.tabIndex = 0;
-    windowElement.dataset.zoomFitMode = zoomFitMode;
+  const createWindowChrome = ({
+    windowElement,
+    windowId,
+    windowType = 'pdf',
+    layout = {},
+    initialZIndex = null,
+    shouldStartMaximized = false,
+    onFocusPersist,
+    onLayoutCommit,
+    onMaximizeChange,
+  } = {}) => {
+    if (!(windowElement instanceof HTMLElement)) {
+      throw new Error('A valid window element is required.');
+    }
 
-    const windowType =
-      typeof options.windowType === 'string' && options.windowType.trim().length > 0
-        ? options.windowType.trim()
-        : 'pdf';
-    windowElement.dataset.windowType = windowType;
+    const resizeHandles = [];
+    let maximizeButton = null;
+    let ignorePointerPredicate = null;
 
-    const resizeHandleDefinitions = [
-      { position: 'top-left', horizontal: 'left', vertical: 'top', cursor: 'nwse-resize' },
-      { position: 'top-right', horizontal: 'right', vertical: 'top', cursor: 'nesw-resize' },
-      { position: 'bottom-left', horizontal: 'left', vertical: 'bottom', cursor: 'nesw-resize' },
-      { position: 'bottom-right', horizontal: 'right', vertical: 'bottom', cursor: 'nwse-resize' },
-    ];
+    const preferredWidth = Number.isFinite(layout.width)
+      ? Math.round(layout.width)
+      : DEFAULT_WINDOW_WIDTH;
+    const preferredHeight = Number.isFinite(layout.height)
+      ? Math.round(layout.height)
+      : DEFAULT_WINDOW_HEIGHT;
 
-    const preferredWidth = Number.isFinite(options.restoreWidth)
-      ? options.restoreWidth
-      : Number.isFinite(options.width)
-        ? options.width
-        : DEFAULT_WINDOW_WIDTH;
-    const preferredHeight = Number.isFinite(options.restoreHeight)
-      ? options.restoreHeight
-      : Number.isFinite(options.height)
-        ? options.height
-        : DEFAULT_WINDOW_HEIGHT;
-
-    let candidateLeft = Number.isFinite(options.restoreLeft)
-      ? options.restoreLeft
-      : Number.isFinite(options.left)
-        ? options.left
-        : null;
-    let candidateTop = Number.isFinite(options.restoreTop)
-      ? options.restoreTop
-      : Number.isFinite(options.top)
-        ? options.top
-        : null;
+    let candidateLeft = Number.isFinite(layout.left) ? Math.round(layout.left) : null;
+    let candidateTop = Number.isFinite(layout.top) ? Math.round(layout.top) : null;
 
     let bounds = clampBoundsToArea({
       left: candidateLeft ?? 0,
@@ -212,13 +198,17 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       top: bounds.top,
       width: bounds.width,
       height: bounds.height,
-      restoreLeft: Number.isFinite(options.restoreLeft) ? Math.round(options.restoreLeft) : bounds.left,
-      restoreTop: Number.isFinite(options.restoreTop) ? Math.round(options.restoreTop) : bounds.top,
-      restoreWidth: Number.isFinite(options.restoreWidth)
-        ? Math.round(options.restoreWidth)
+      restoreLeft: Number.isFinite(layout.restoreLeft)
+        ? Math.round(layout.restoreLeft)
+        : bounds.left,
+      restoreTop: Number.isFinite(layout.restoreTop)
+        ? Math.round(layout.restoreTop)
+        : bounds.top,
+      restoreWidth: Number.isFinite(layout.restoreWidth)
+        ? Math.round(layout.restoreWidth)
         : bounds.width,
-      restoreHeight: Number.isFinite(options.restoreHeight)
-        ? Math.round(options.restoreHeight)
+      restoreHeight: Number.isFinite(layout.restoreHeight)
+        ? Math.round(layout.restoreHeight)
         : bounds.height,
     };
 
@@ -245,10 +235,12 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     const setWindowBounds = (nextBounds = {}, { updateRestore = false } = {}) => {
       const clamped = clampBoundsToArea({
-        left: Number.isFinite(nextBounds.left) ? nextBounds.left : layoutState.left,
-        top: Number.isFinite(nextBounds.top) ? nextBounds.top : layoutState.top,
-        width: Number.isFinite(nextBounds.width) ? nextBounds.width : layoutState.width,
-        height: Number.isFinite(nextBounds.height) ? nextBounds.height : layoutState.height,
+        left: Number.isFinite(nextBounds.left) ? Math.round(nextBounds.left) : layoutState.left,
+        top: Number.isFinite(nextBounds.top) ? Math.round(nextBounds.top) : layoutState.top,
+        width: Number.isFinite(nextBounds.width) ? Math.round(nextBounds.width) : layoutState.width,
+        height: Number.isFinite(nextBounds.height)
+          ? Math.round(nextBounds.height)
+          : layoutState.height,
       });
 
       layoutState = {
@@ -271,11 +263,16 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       return { ...layoutState };
     };
 
-    let currentZIndex = Number.isFinite(options?.layout?.zIndex)
-      ? Math.round(options.layout.zIndex)
-      : Number.isFinite(options.zIndex)
-        ? Math.round(options.zIndex)
-        : null;
+    const getWindowBounds = () => ({
+      left: layoutState.left,
+      top: layoutState.top,
+      width: layoutState.width,
+      height: layoutState.height,
+    });
+
+    const getWindowSize = () => ({ width: layoutState.width, height: layoutState.height });
+
+    let currentZIndex = Number.isFinite(initialZIndex) ? Math.round(initialZIndex) : null;
 
     const applyZIndex = (value) => {
       currentZIndex = Math.max(1, Math.round(value));
@@ -294,159 +291,13 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       applyZIndex(currentZIndex);
     }
 
-    const windowId =
-      typeof options.id === 'string' && options.id.length > 0
-        ? options.id
-        : createWindowId('window');
-
     windowElement.dataset.windowId = windowId;
+    windowElement.dataset.windowType = windowType;
+    windowElement.tabIndex = 0;
 
-    const shouldStartMaximized = options.maximized === true;
     let isMaximized = false;
     let dragState = null;
     let resizeState = null;
-
-    const shouldAutoFocus = options.autoFocus !== false;
-    let currentPage = Number.isFinite(options.page)
-      ? Math.max(1, Math.floor(options.page))
-      : 1;
-    const sanitizeHistoryValue = (value) => {
-      if (!Number.isFinite(value)) {
-        return null;
-      }
-
-      return Math.max(1, Math.floor(value));
-    };
-
-    const initialHistory = Array.isArray(options.pageHistory)
-      ? options.pageHistory
-          .map(sanitizeHistoryValue)
-          .filter((value) => Number.isFinite(value))
-      : [];
-
-    let pageHistory = initialHistory.length > 0 ? initialHistory.slice() : [currentPage];
-    let pageHistoryIndex = Number.isFinite(options.pageHistoryIndex)
-      ? Math.floor(options.pageHistoryIndex)
-      : pageHistory.length - 1;
-
-    if (pageHistory.length > PAGE_HISTORY_LIMIT) {
-      const overflow = pageHistory.length - PAGE_HISTORY_LIMIT;
-      pageHistory = pageHistory.slice(overflow);
-      pageHistoryIndex -= overflow;
-    }
-
-    if (pageHistoryIndex < 0) {
-      pageHistoryIndex = 0;
-    }
-
-    if (pageHistoryIndex >= pageHistory.length) {
-      pageHistoryIndex = pageHistory.length - 1;
-    }
-
-    currentPage = pageHistory[pageHistoryIndex] ?? currentPage;
-    let currentZoom = Number.isFinite(options.zoom)
-      ? Number.parseFloat(options.zoom)
-      : DEFAULT_WINDOW_ZOOM;
-    let totalPages = Number.isFinite(options.totalPages) ? options.totalPages : null;
-    let openedAt = Number.isFinite(options.openedAt) ? options.openedAt : Date.now();
-    let lastFocusedAt = Number.isFinite(options.lastFocusedAt)
-      ? options.lastFocusedAt
-      : openedAt;
-    let hasStoredFile = options.persisted === true;
-    let bookmarksWindowEntry = null;
-    let notesWindowEntry = null;
-    let searchController;
-    let toolbarController;
-    let outlineList;
-    let outlineStatus;
-    let outlineEntries = [];
-    let lastBookmarkStatus = '';
-    let lastBookmarkStatusIsError = false;
-    const sanitizeBookmarkValue = (value) => {
-      if (!Number.isFinite(value)) {
-        return null;
-      }
-
-      const normalized = Math.max(1, Math.floor(value));
-
-      if (Number.isFinite(options.totalPages)) {
-        const total = Math.max(1, Math.floor(options.totalPages));
-        return Math.min(normalized, total);
-      }
-
-      return normalized;
-    };
-
-    const initialBookmarks = Array.isArray(options.bookmarks)
-      ? options.bookmarks
-          .map(sanitizeBookmarkValue)
-          .filter((value) => Number.isFinite(value))
-      : [];
-
-    let bookmarks = Array.from(new Set(initialBookmarks)).sort((a, b) => a - b);
-
-    if (bookmarks.length > MAX_WINDOW_BOOKMARKS) {
-      bookmarks = bookmarks.slice(-MAX_WINDOW_BOOKMARKS);
-    }
-    const resizeHandles = [];
-    let maximizeButton;
-    const defaultTitle = file.name;
-    let windowTitle =
-      typeof options.title === 'string' && options.title.trim().length > 0
-        ? options.title.trim()
-        : defaultTitle;
-    let windowNotes = typeof options.notes === 'string' ? options.notes : '';
-    let titleInput;
-    let renameButton;
-    let colorButton;
-    let bookmarksWindowButton;
-    let notesWindowButton;
-    let editingTitle = false;
-
-    const sanitizeColor = (value) => {
-      if (typeof value !== 'string') {
-        return DEFAULT_WINDOW_COLOR;
-      }
-
-      const normalized = value.toLowerCase();
-      const match = WINDOW_COLORS.find((color) => color.id === normalized);
-      return match ? match.id : DEFAULT_WINDOW_COLOR;
-    };
-
-    let windowColor = sanitizeColor(options.color);
-
-    const normalizeRotation = (value) => {
-      if (!Number.isFinite(value)) {
-        return DEFAULT_WINDOW_ROTATION;
-      }
-
-      const rounded = Math.round(value / ROTATION_STEP) * ROTATION_STEP;
-      const wrapped = ((rounded % 360) + 360) % 360;
-      return wrapped === 360 ? 0 : wrapped;
-    };
-
-    let currentRotation = normalizeRotation(options.rotation);
-
-    const viewer = createPdfViewer(file);
-    let disposed = false;
-
-    const emitMaximizeChange = () => {
-      const bounds = getWindowBounds();
-
-      const maximizeEvent = new CustomEvent(WINDOW_MAXIMIZE_CHANGE_EVENT, {
-        bubbles: true,
-        detail: {
-          file,
-          maximized: isMaximized,
-          width: bounds.width,
-          height: bounds.height,
-          left: bounds.left,
-          top: bounds.top,
-        },
-      });
-
-      windowElement.dispatchEvent(maximizeEvent);
-    };
 
     const updateMaximizeVisualState = () => {
       windowElement.classList.toggle('workspace__window--maximized', isMaximized);
@@ -465,6 +316,57 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       });
 
       windowElement.classList.remove('workspace__window--resizing');
+    };
+
+    const finishResizeInteraction = ({ commit = false } = {}) => {
+      if (!resizeState) {
+        return;
+      }
+
+      const { handle, pointerId, hasResized } = resizeState;
+
+      if (handle && typeof handle.releasePointerCapture === 'function') {
+        try {
+          handle.releasePointerCapture(pointerId);
+        } catch (error) {
+          // ignore pointer capture release failures
+        }
+      }
+
+      resizeState = null;
+      windowElement.classList.remove('workspace__window--resizing');
+      windowElement.style.removeProperty('--workspace-window-resize-cursor');
+
+      if (commit && hasResized) {
+        if (!isMaximized) {
+          setWindowBounds({}, { updateRestore: true });
+        }
+
+        if (typeof onLayoutCommit === 'function') {
+          onLayoutCommit({ flush: true, layout: { ...layoutState } });
+        }
+      }
+    };
+
+    const finishPointerDrag = () => {
+      if (!dragState) {
+        return;
+      }
+
+      if (typeof dragState.release === 'function') {
+        try {
+          dragState.release();
+        } catch (error) {
+          // ignore pointer capture release failures
+        }
+      }
+
+      dragState = null;
+      windowElement.classList.remove('workspace__window--dragging');
+
+      if (typeof onLayoutCommit === 'function') {
+        onLayoutCommit({ flush: false, layout: { ...layoutState } });
+      }
     };
 
     const setMaximizedState = (value, { emit = true, persist = true } = {}) => {
@@ -504,55 +406,199 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
       updateMaximizeVisualState();
 
-      if (emit) {
-        emitMaximizeChange();
+      if (emit && typeof onMaximizeChange === 'function') {
+        onMaximizeChange({ maximized: isMaximized, layout: { ...layoutState } });
       }
 
-      if (persist) {
-        schedulePersist();
+      if (persist && typeof onLayoutCommit === 'function') {
+        onLayoutCommit({ flush: false, layout: { ...layoutState } });
       }
+
+      return isMaximized;
     };
 
     const toggleMaximize = () => {
-      bringToFront();
       setMaximizedState(!isMaximized);
-      syncControlLabels();
     };
 
-    const dispatchCloseEvent = () => {
-      const closure = new CustomEvent(WINDOW_CLOSE_EVENT, {
-        bubbles: true,
-        detail: { file },
+    const bringToFront = ({ persistFocus = true } = {}) => {
+      area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
+        if (otherWindow !== windowElement) {
+          otherWindow.classList.remove('workspace__window--active');
+          otherWindow.dataset.windowActive = 'false';
+        }
       });
-      windowElement.dispatchEvent(closure);
+
+      applyZIndex(getNextZIndex());
+      windowElement.classList.add('workspace__window--active');
+      windowElement.dataset.windowActive = 'true';
+      area.dataset.activeWindowId = windowId;
+
+      if (persistFocus && typeof onFocusPersist === 'function') {
+        onFocusPersist();
+      }
+
+      return windowElement;
     };
 
-    const finishResizeInteraction = ({ commit = false } = {}) => {
-      if (!resizeState) {
-        return;
+    const setPointerIgnorePredicate = (predicate) => {
+      if (typeof predicate === 'function') {
+        ignorePointerPredicate = predicate;
+      } else {
+        ignorePointerPredicate = null;
       }
+    };
 
-      const { handle, pointerId, hasResized } = resizeState;
-
-      if (handle && typeof handle.releasePointerCapture === 'function') {
+    const shouldIgnorePointerInteraction = (event) => {
+      if (typeof ignorePointerPredicate === 'function') {
         try {
-          handle.releasePointerCapture(pointerId);
+          if (ignorePointerPredicate(event)) {
+            return true;
+          }
         } catch (error) {
-          // ignore pointer capture release failures
+          return true;
         }
       }
 
-      resizeState = null;
-      windowElement.classList.remove('workspace__window--resizing');
-      windowElement.style.removeProperty('--workspace-window-resize-cursor');
+      const target = event.target;
 
-      if (commit && hasResized) {
-        if (!isMaximized) {
-          setWindowBounds({}, { updateRestore: true });
+      if (target instanceof HTMLElement) {
+        if (
+          target.closest('button') ||
+          target.closest('input') ||
+          target.closest('textarea') ||
+          target.closest('select') ||
+          target.closest('[contenteditable="true"]')
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    const attachHeader = (header) => {
+      if (!(header instanceof HTMLElement)) {
+        return () => {};
+      }
+
+      const handleHeaderPointerDown = (event) => {
+        if (typeof event.button === 'number' && event.button > 0) {
+          return;
         }
 
-        schedulePersist({ flush: true });
-      }
+        if (shouldIgnorePointerInteraction(event)) {
+          return;
+        }
+
+        bringToFront();
+        windowElement.focus({ preventScroll: true });
+
+        if (isMaximized) {
+          setMaximizedState(false, { emit: false, persist: false });
+        }
+
+        const areaRect = area.getBoundingClientRect();
+        const pointerId = event.pointerId;
+
+        const release = () => {
+          if (typeof header.releasePointerCapture === 'function') {
+            try {
+              header.releasePointerCapture(pointerId);
+            } catch (error) {
+              // ignore pointer capture release failures
+            }
+          }
+        };
+
+        dragState = {
+          pointerId,
+          offsetX: event.clientX - areaRect.left - layoutState.left,
+          offsetY: event.clientY - areaRect.top - layoutState.top,
+          release,
+        };
+
+        windowElement.classList.add('workspace__window--dragging');
+
+        if (typeof header.setPointerCapture === 'function') {
+          try {
+            header.setPointerCapture(pointerId);
+          } catch (error) {
+            // ignore pointer capture failures
+          }
+        }
+
+        event.preventDefault();
+      };
+
+      const handleHeaderPointerMove = (event) => {
+        if (!dragState || event.pointerId !== dragState.pointerId) {
+          return;
+        }
+
+        const areaRect = area.getBoundingClientRect();
+        const nextLeft = event.clientX - areaRect.left - dragState.offsetX;
+        const nextTop = event.clientY - areaRect.top - dragState.offsetY;
+
+        setWindowBounds({ left: nextLeft, top: nextTop }, { updateRestore: !isMaximized });
+      };
+
+      const handleHeaderPointerUp = (event) => {
+        if (!dragState || event.pointerId !== dragState.pointerId) {
+          return;
+        }
+
+        finishPointerDrag();
+      };
+
+      const handleHeaderPointerCancel = () => {
+        finishPointerDrag();
+      };
+
+      const handleHeaderMouseDown = () => {
+        bringToFront({ persistFocus: false });
+      };
+
+      header.addEventListener('pointerdown', handleHeaderPointerDown);
+      header.addEventListener('pointermove', handleHeaderPointerMove);
+      header.addEventListener('pointerup', handleHeaderPointerUp);
+      header.addEventListener('pointercancel', handleHeaderPointerCancel);
+      header.addEventListener('lostpointercapture', handleHeaderPointerCancel);
+      header.addEventListener('mousedown', handleHeaderMouseDown);
+
+      return () => {
+        header.removeEventListener('pointerdown', handleHeaderPointerDown);
+        header.removeEventListener('pointermove', handleHeaderPointerMove);
+        header.removeEventListener('pointerup', handleHeaderPointerUp);
+        header.removeEventListener('pointercancel', handleHeaderPointerCancel);
+        header.removeEventListener('lostpointercapture', handleHeaderPointerCancel);
+        header.removeEventListener('mousedown', handleHeaderMouseDown);
+      };
+    };
+
+    const attachWindowInteractions = ({ shouldIgnorePointerInteraction: customIgnore } = {}) => {
+      const evaluator = typeof customIgnore === 'function' ? customIgnore : shouldIgnorePointerInteraction;
+
+      const handleWindowFocus = () => {
+        bringToFront();
+      };
+
+      const handleWindowMouseDown = (event) => {
+        if (typeof evaluator === 'function' && evaluator(event)) {
+          return;
+        }
+
+        bringToFront();
+        windowElement.focus({ preventScroll: true });
+      };
+
+      windowElement.addEventListener('focus', handleWindowFocus);
+      windowElement.addEventListener('mousedown', handleWindowMouseDown);
+
+      return () => {
+        windowElement.removeEventListener('focus', handleWindowFocus);
+        windowElement.removeEventListener('mousedown', handleWindowMouseDown);
+      };
     };
 
     const createResizeHandle = (definition) => {
@@ -562,7 +608,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       handle.dataset.resizePosition = definition.position;
       handle.disabled = false;
       handle.setAttribute('aria-hidden', 'false');
-      handle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
+      handle.setAttribute('aria-label', 'ウィンドウサイズを変更');
 
       const handlePointerDown = (event) => {
         if (typeof event.button === 'number' && event.button > 0) {
@@ -684,7 +730,292 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         event.stopPropagation();
       });
 
+      resizeHandles.push(handle);
       return handle;
+    };
+
+    const setMaximizeControl = (button) => {
+      if (button instanceof HTMLButtonElement) {
+        maximizeButton = button;
+        updateMaximizeVisualState();
+      } else {
+        maximizeButton = null;
+      }
+    };
+
+    const destroy = () => {
+      finishPointerDrag();
+      finishResizeInteraction({ commit: false });
+    };
+
+    setMaximizedState(shouldStartMaximized, { emit: false, persist: false });
+
+    return {
+      bringToFront,
+      createResizeHandle,
+      destroy,
+      finishPointerDrag,
+      finishResizeInteraction,
+      getLayoutState: () => ({ ...layoutState }),
+      getWindowBounds,
+      getWindowSize,
+      isMaximized: () => isMaximized,
+      setMaximizeControl,
+      setMaximizedState,
+      setPointerIgnorePredicate,
+      setWindowBounds,
+      toggleMaximize,
+      attachHeader,
+      attachWindowInteractions,
+      getResizeHandles: () => resizeHandles.slice(),
+    };
+  };
+
+  const openWindow = (file, options = {}) => {
+    let zoomFitMode = 'manual';
+    const windowElement = document.createElement('article');
+    windowElement.className = 'workspace__window';
+    windowElement.setAttribute('role', 'group');
+    windowElement.tabIndex = 0;
+    windowElement.dataset.zoomFitMode = zoomFitMode;
+
+    const windowType =
+      typeof options.windowType === 'string' && options.windowType.trim().length > 0
+        ? options.windowType.trim()
+        : 'pdf';
+    windowElement.dataset.windowType = windowType;
+
+    const resizeHandleDefinitions = [
+      { position: 'top-left', horizontal: 'left', vertical: 'top', cursor: 'nwse-resize' },
+      { position: 'top-right', horizontal: 'right', vertical: 'top', cursor: 'nesw-resize' },
+      { position: 'bottom-left', horizontal: 'left', vertical: 'bottom', cursor: 'nesw-resize' },
+      { position: 'bottom-right', horizontal: 'right', vertical: 'bottom', cursor: 'nwse-resize' },
+    ];
+
+    const layoutOptions = {
+      width: Number.isFinite(options.restoreWidth)
+        ? options.restoreWidth
+        : Number.isFinite(options.width)
+          ? options.width
+          : DEFAULT_WINDOW_WIDTH,
+      height: Number.isFinite(options.restoreHeight)
+        ? options.restoreHeight
+        : Number.isFinite(options.height)
+          ? options.height
+          : DEFAULT_WINDOW_HEIGHT,
+      left: Number.isFinite(options.restoreLeft)
+        ? options.restoreLeft
+        : Number.isFinite(options.left)
+          ? options.left
+          : null,
+      top: Number.isFinite(options.restoreTop)
+        ? options.restoreTop
+        : Number.isFinite(options.top)
+          ? options.top
+          : null,
+      restoreLeft: options.restoreLeft,
+      restoreTop: options.restoreTop,
+      restoreWidth: options.restoreWidth,
+      restoreHeight: options.restoreHeight,
+    };
+
+    const initialZIndex = Number.isFinite(options?.layout?.zIndex)
+      ? Math.round(options.layout.zIndex)
+      : Number.isFinite(options.zIndex)
+        ? Math.round(options.zIndex)
+        : null;
+
+    const windowId =
+      typeof options.id === 'string' && options.id.length > 0
+        ? options.id
+        : createWindowId('window');
+
+    const shouldStartMaximized = options.maximized === true;
+    const shouldAutoFocus = options.autoFocus !== false;
+
+    let schedulePersist = () => {};
+    let handleLayoutCommit = () => {};
+    let handleMaximizeChange = () => {};
+    let handleFocusPersist = () => {};
+
+    const chrome = createWindowChrome({
+      windowElement,
+      windowId,
+      windowType,
+      layout: layoutOptions,
+      initialZIndex,
+      shouldStartMaximized,
+      onFocusPersist: () => {
+        handleFocusPersist();
+      },
+      onLayoutCommit: ({ flush = false } = {}) => {
+        handleLayoutCommit({ flush });
+      },
+      onMaximizeChange: (detail) => {
+        handleMaximizeChange(detail);
+      },
+    });
+
+    const getWindowBounds = () => chrome.getWindowBounds();
+    const getWindowSize = () => chrome.getWindowSize();
+    const setWindowBounds = (...args) => chrome.setWindowBounds(...args);
+    const setMaximizedState = (...args) => chrome.setMaximizedState(...args);
+    const bringToFront = (...args) => chrome.bringToFront(...args);
+    const finishResizeInteraction = (...args) => chrome.finishResizeInteraction(...args);
+    const finishPointerDrag = () => chrome.finishPointerDrag();
+
+    let currentPage = Number.isFinite(options.page)
+      ? Math.max(1, Math.floor(options.page))
+      : 1;
+    const sanitizeHistoryValue = (value) => {
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+
+      return Math.max(1, Math.floor(value));
+    };
+
+    const initialHistory = Array.isArray(options.pageHistory)
+      ? options.pageHistory
+          .map(sanitizeHistoryValue)
+          .filter((value) => Number.isFinite(value))
+      : [];
+
+    let pageHistory = initialHistory.length > 0 ? initialHistory.slice() : [currentPage];
+    let pageHistoryIndex = Number.isFinite(options.pageHistoryIndex)
+      ? Math.floor(options.pageHistoryIndex)
+      : pageHistory.length - 1;
+
+    if (pageHistory.length > PAGE_HISTORY_LIMIT) {
+      const overflow = pageHistory.length - PAGE_HISTORY_LIMIT;
+      pageHistory = pageHistory.slice(overflow);
+      pageHistoryIndex -= overflow;
+    }
+
+    if (pageHistoryIndex < 0) {
+      pageHistoryIndex = 0;
+    }
+
+    if (pageHistoryIndex >= pageHistory.length) {
+      pageHistoryIndex = pageHistory.length - 1;
+    }
+
+    currentPage = pageHistory[pageHistoryIndex] ?? currentPage;
+    let currentZoom = Number.isFinite(options.zoom)
+      ? Number.parseFloat(options.zoom)
+      : DEFAULT_WINDOW_ZOOM;
+    let totalPages = Number.isFinite(options.totalPages) ? options.totalPages : null;
+    let openedAt = Number.isFinite(options.openedAt) ? options.openedAt : Date.now();
+    let lastFocusedAt = Number.isFinite(options.lastFocusedAt)
+      ? options.lastFocusedAt
+      : openedAt;
+    let hasStoredFile = options.persisted === true;
+    let bookmarksWindowEntry = null;
+    let notesWindowEntry = null;
+    let searchController;
+    let toolbarController;
+    let outlineList;
+    let outlineStatus;
+    let outlineEntries = [];
+    let lastBookmarkStatus = '';
+    let lastBookmarkStatusIsError = false;
+    const sanitizeBookmarkValue = (value) => {
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+
+      const normalized = Math.max(1, Math.floor(value));
+
+      if (Number.isFinite(options.totalPages)) {
+        const total = Math.max(1, Math.floor(options.totalPages));
+        return Math.min(normalized, total);
+      }
+
+      return normalized;
+    };
+
+    const initialBookmarks = Array.isArray(options.bookmarks)
+      ? options.bookmarks
+          .map(sanitizeBookmarkValue)
+          .filter((value) => Number.isFinite(value))
+      : [];
+
+    let bookmarks = Array.from(new Set(initialBookmarks)).sort((a, b) => a - b);
+
+    if (bookmarks.length > MAX_WINDOW_BOOKMARKS) {
+      bookmarks = bookmarks.slice(-MAX_WINDOW_BOOKMARKS);
+    }
+    let maximizeButton;
+    const defaultTitle = file.name;
+    let windowTitle =
+      typeof options.title === 'string' && options.title.trim().length > 0
+        ? options.title.trim()
+        : defaultTitle;
+    let windowNotes = typeof options.notes === 'string' ? options.notes : '';
+    let titleInput;
+    let renameButton;
+    let colorButton;
+    let bookmarksWindowButton;
+    let notesWindowButton;
+    let editingTitle = false;
+
+    const sanitizeColor = (value) => {
+      if (typeof value !== 'string') {
+        return DEFAULT_WINDOW_COLOR;
+      }
+
+      const normalized = value.toLowerCase();
+      const match = WINDOW_COLORS.find((color) => color.id === normalized);
+      return match ? match.id : DEFAULT_WINDOW_COLOR;
+    };
+
+    let windowColor = sanitizeColor(options.color);
+
+    const normalizeRotation = (value) => {
+      if (!Number.isFinite(value)) {
+        return DEFAULT_WINDOW_ROTATION;
+      }
+
+      const rounded = Math.round(value / ROTATION_STEP) * ROTATION_STEP;
+      const wrapped = ((rounded % 360) + 360) % 360;
+      return wrapped === 360 ? 0 : wrapped;
+    };
+
+    let currentRotation = normalizeRotation(options.rotation);
+
+    const viewer = createPdfViewer(file);
+    let disposed = false;
+
+    const emitMaximizeChange = () => {
+      const bounds = getWindowBounds();
+
+      const maximizeEvent = new CustomEvent(WINDOW_MAXIMIZE_CHANGE_EVENT, {
+        bubbles: true,
+        detail: {
+          file,
+          maximized: chrome.isMaximized(),
+          width: bounds.width,
+          height: bounds.height,
+          left: bounds.left,
+          top: bounds.top,
+        },
+      });
+
+      windowElement.dispatchEvent(maximizeEvent);
+    };
+
+    const toggleMaximize = () => {
+      bringToFront();
+      chrome.toggleMaximize();
+      syncControlLabels();
+    };
+
+    const dispatchCloseEvent = () => {
+      const closure = new CustomEvent(WINDOW_CLOSE_EVENT, {
+        bubbles: true,
+        detail: { file },
+      });
+      windowElement.dispatchEvent(closure);
     };
 
     const disposeWindow = ({ persistRemoval = true, emitClose = true } = {}) => {
@@ -715,8 +1046,9 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
 
       searchController?.cancel();
-      finishPointerDrag();
-      finishResizeInteraction({ commit: false });
+      detachHeaderInteractions();
+      detachWindowInteractions();
+      chrome.destroy();
 
       if (emitClose) {
         dispatchCloseEvent();
@@ -741,28 +1073,17 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
     };
 
-    const getWindowBounds = () => ({
-      left: layoutState.left,
-      top: layoutState.top,
-      width: layoutState.width,
-      height: layoutState.height,
-    });
-
-    const getWindowSize = () => {
-      const { width, height } = getWindowBounds();
-      return { width, height };
-    };
-
     const persistState = async ({ includeFile = false } = {}) => {
+      const layout = chrome.getLayoutState();
       const descriptor = {
         id: windowId,
         name: file.name,
         type: file.type,
         lastModified: file.lastModified,
-        left: layoutState.left,
-        top: layoutState.top,
-        width: layoutState.width,
-        height: layoutState.height,
+        left: layout.left,
+        top: layout.top,
+        width: layout.width,
+        height: layout.height,
         page: currentPage,
         zoom: currentZoom,
         rotation: currentRotation,
@@ -775,19 +1096,11 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         color: windowColor,
         pageHistory: pageHistory.slice(),
         pageHistoryIndex,
-        maximized: isMaximized,
-        restoreLeft: Number.isFinite(layoutState.restoreLeft)
-          ? layoutState.restoreLeft
-          : layoutState.left,
-        restoreTop: Number.isFinite(layoutState.restoreTop)
-          ? layoutState.restoreTop
-          : layoutState.top,
-        restoreWidth: Number.isFinite(layoutState.restoreWidth)
-          ? layoutState.restoreWidth
-          : layoutState.width,
-        restoreHeight: Number.isFinite(layoutState.restoreHeight)
-          ? layoutState.restoreHeight
-          : layoutState.height,
+        maximized: chrome.isMaximized(),
+        restoreLeft: Number.isFinite(layout.restoreLeft) ? layout.restoreLeft : layout.left,
+        restoreTop: Number.isFinite(layout.restoreTop) ? layout.restoreTop : layout.top,
+        restoreWidth: Number.isFinite(layout.restoreWidth) ? layout.restoreWidth : layout.width,
+        restoreHeight: Number.isFinite(layout.restoreHeight) ? layout.restoreHeight : layout.height,
         bookmarks: bookmarks.slice(),
         windowType,
       };
@@ -829,7 +1142,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         .catch(() => {});
     };
 
-    const schedulePersist = ({ includeFile = false, flush = false } = {}) => {
+    schedulePersist = ({ includeFile = false, flush = false } = {}) => {
       if (includeFile) {
         pendingPersistIncludeFile = true;
       }
@@ -859,7 +1172,21 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       });
     };
 
+    handleLayoutCommit = ({ flush = false } = {}) => {
+      schedulePersist({ flush });
+    };
+
+    handleMaximizeChange = () => {
+      emitMaximizeChange();
+    };
+
     syncFocusMetadata();
+
+    handleFocusPersist = () => {
+      lastFocusedAt = Date.now();
+      syncFocusMetadata();
+      schedulePersist();
+    };
 
     const syncRotationState = () => {
       if (toolbarController) {
@@ -1790,29 +2117,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     const isPinned = () => windowElement.classList.contains('workspace__window--pinned');
 
-    const bringToFront = ({ persistFocus = true } = {}) => {
-      area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
-        if (otherWindow !== windowElement) {
-          otherWindow.classList.remove('workspace__window--active');
-          otherWindow.dataset.windowActive = 'false';
-        }
-      });
-      windowElement.classList.add('workspace__window--active');
-      windowElement.dataset.windowActive = 'true';
-      area.dataset.activeWindowId = windowId;
-      applyZIndex(getNextZIndex());
-
-      if (persistFocus) {
-        lastFocusedAt = Date.now();
-      }
-
-      syncFocusMetadata();
-
-      if (persistFocus) {
-        schedulePersist();
-      }
-    };
-
     const commitPageChange = (page, { fromHistory = false } = {}) => {
       const nextPage = clampPage(page);
 
@@ -2102,6 +2406,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     maximizeButton.addEventListener('click', () => {
       toggleMaximize();
     });
+    chrome.setMaximizeControl(maximizeButton);
 
     const duplicateButton = document.createElement('button');
     duplicateButton.type = 'button';
@@ -2214,13 +2519,13 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       toolbarController?.updateLabels(windowTitle);
 
       if (maximizeButton) {
-        const label = isMaximized
+        const label = chrome.isMaximized()
           ? `${windowTitle} を元のサイズに戻す`
           : `${windowTitle} を最大化`;
         maximizeButton.setAttribute('aria-label', label);
       }
 
-      resizeHandles.forEach((handle) => {
+      chrome.getResizeHandles().forEach((handle) => {
         handle.setAttribute('aria-label', `${windowTitle} のウィンドウサイズを変更`);
       });
 
@@ -2492,140 +2797,16 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     windowElement.append(header, body);
 
+    chrome.setPointerIgnorePredicate(() => editingTitle);
     resizeHandleDefinitions.forEach((definition) => {
-      const handle = createResizeHandle(definition);
-      resizeHandles.push(handle);
+      const handle = chrome.createResizeHandle(definition);
       windowElement.append(handle);
     });
 
-    const shouldIgnorePointerInteraction = (event) => {
-      if (editingTitle) {
-        return true;
-      }
+    const detachHeaderInteractions = chrome.attachHeader(header);
+    const detachWindowInteractions = chrome.attachWindowInteractions();
 
-      const target = event.target;
-
-      if (target instanceof HTMLElement) {
-        if (
-          target.closest('button') ||
-          target.closest('input') ||
-          target.closest('textarea') ||
-          target.closest('select') ||
-          target.closest('[contenteditable="true"]')
-        ) {
-          return true;
-        }
-      }
-
-      return false;
-    };
-
-    const finishPointerDrag = () => {
-      if (!dragState) {
-        return;
-      }
-
-      if (typeof header.releasePointerCapture === 'function') {
-        try {
-          header.releasePointerCapture(dragState.pointerId);
-        } catch (error) {
-          // ignore pointer capture release failures
-        }
-      }
-
-      dragState = null;
-      windowElement.classList.remove('workspace__window--dragging');
-      schedulePersist();
-    };
-
-    const handleHeaderPointerDown = (event) => {
-      if (typeof event.button === 'number' && event.button > 0) {
-        return;
-      }
-
-      if (shouldIgnorePointerInteraction(event)) {
-        return;
-      }
-
-      bringToFront();
-      windowElement.focus({ preventScroll: true });
-
-      if (isMaximized) {
-        setMaximizedState(false, { emit: false, persist: false });
-        syncControlLabels();
-      }
-
-      const areaRect = area.getBoundingClientRect();
-      dragState = {
-        pointerId: event.pointerId,
-        offsetX: event.clientX - areaRect.left - layoutState.left,
-        offsetY: event.clientY - areaRect.top - layoutState.top,
-      };
-
-      windowElement.classList.add('workspace__window--dragging');
-
-      if (typeof header.setPointerCapture === 'function') {
-        try {
-          header.setPointerCapture(event.pointerId);
-        } catch (error) {
-          // ignore pointer capture failures
-        }
-      }
-
-      event.preventDefault();
-    };
-
-    const handleHeaderPointerMove = (event) => {
-      if (!dragState || event.pointerId !== dragState.pointerId) {
-        return;
-      }
-
-      const areaRect = area.getBoundingClientRect();
-      const nextLeft = event.clientX - areaRect.left - dragState.offsetX;
-      const nextTop = event.clientY - areaRect.top - dragState.offsetY;
-
-      setWindowBounds({ left: nextLeft, top: nextTop }, { updateRestore: !isMaximized });
-    };
-
-    const handleHeaderPointerUp = (event) => {
-      if (!dragState || event.pointerId !== dragState.pointerId) {
-        return;
-      }
-
-      finishPointerDrag();
-    };
-
-    const handleHeaderPointerCancel = () => {
-      finishPointerDrag();
-    };
-
-    header.addEventListener('pointerdown', handleHeaderPointerDown);
-    header.addEventListener('pointermove', handleHeaderPointerMove);
-    header.addEventListener('pointerup', handleHeaderPointerUp);
-    header.addEventListener('pointercancel', handleHeaderPointerCancel);
-    header.addEventListener('lostpointercapture', handleHeaderPointerCancel);
-
-    setMaximizedState(shouldStartMaximized, { emit: false, persist: false });
     syncControlLabels();
-    windowElement.addEventListener('focus', () => {
-      bringToFront();
-    });
-    windowElement.addEventListener('mousedown', (event) => {
-      if (
-        event.target instanceof HTMLElement &&
-        (event.target.closest('button') ||
-          event.target.closest('.workspace__window-title-input'))
-      ) {
-        return;
-      }
-
-      if (editingTitle) {
-        return;
-      }
-
-      bringToFront();
-      windowElement.focus({ preventScroll: true });
-    });
 
     windowElement.addEventListener('keydown', (event) => {
       if (event.defaultPrevented) {
@@ -2748,16 +2929,26 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
   };
 
   const openMemoWindow = (options = {}) => {
-    const initialWidth = Number.isFinite(options.width) ? options.width : DEFAULT_WINDOW_WIDTH;
-    const initialHeight = Number.isFinite(options.height) ? options.height : DEFAULT_WINDOW_HEIGHT;
-    const shouldAutoFocus = options.autoFocus !== false;
+    const layoutOptions = {
+      width: Number.isFinite(options.width) ? options.width : DEFAULT_WINDOW_WIDTH,
+      height: Number.isFinite(options.height) ? options.height : DEFAULT_WINDOW_HEIGHT,
+      left: Number.isFinite(options.left) ? options.left : null,
+      top: Number.isFinite(options.top) ? options.top : null,
+      restoreLeft: options.restoreLeft,
+      restoreTop: options.restoreTop,
+      restoreWidth: options.restoreWidth,
+      restoreHeight: options.restoreHeight,
+    };
 
+    const shouldAutoFocus = options.autoFocus !== false;
     const windowId =
       typeof options.id === 'string' && options.id.length > 0
         ? options.id
         : createWindowId('memo');
 
     let disposeWindow = () => {};
+
+    let syncControlLabels = () => {};
 
     const memoController = createMemoWindow({
       title:
@@ -2779,7 +2970,14 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
             }
           : undefined,
       onTitleChange:
-        typeof options.onTitleChange === 'function' ? options.onTitleChange : undefined,
+        typeof options.onTitleChange === 'function'
+          ? (value) => {
+              options.onTitleChange(value);
+              syncControlLabels();
+            }
+          : () => {
+              syncControlLabels();
+            },
     });
 
     const windowElement = memoController?.element;
@@ -2790,11 +2988,9 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     windowElement.classList.add('workspace__window');
     windowElement.classList.add('workspace__window--memo');
-    windowElement.classList.add('workspace__window--maximized');
-    windowElement.dataset.windowId = windowId;
-    windowElement.dataset.windowType = 'memo';
-    windowElement.dataset.windowMaximized = 'true';
-    windowElement.tabIndex = 0;
+    windowElement.classList.remove('workspace__window--maximized');
+    delete windowElement.dataset.windowMaximized;
+    windowElement.setAttribute('role', 'group');
 
     const header = memoController?.header;
 
@@ -2803,7 +2999,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     }
 
     let disposed = false;
-
     let openedAt = Number.isFinite(options.openedAt) ? options.openedAt : Date.now();
     let lastFocusedAt = Number.isFinite(options.lastFocusedAt) ? options.lastFocusedAt : openedAt;
 
@@ -2812,26 +3007,87 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       windowElement.dataset.lastFocusedAt = String(lastFocusedAt);
     };
 
+    const resizeHandleDefinitions = [
+      { position: 'top-left', horizontal: 'left', vertical: 'top', cursor: 'nwse-resize' },
+      { position: 'top-right', horizontal: 'right', vertical: 'top', cursor: 'nesw-resize' },
+      { position: 'bottom-left', horizontal: 'left', vertical: 'bottom', cursor: 'nesw-resize' },
+      { position: 'bottom-right', horizontal: 'right', vertical: 'bottom', cursor: 'nwse-resize' },
+    ];
+
+    let handleLayoutCommit = () => {};
+
+    const chrome = createWindowChrome({
+      windowElement,
+      windowId,
+      windowType: 'memo',
+      layout: layoutOptions,
+      initialZIndex: Number.isFinite(options.zIndex) ? Math.round(options.zIndex) : null,
+      shouldStartMaximized: options.maximized === true,
+      onFocusPersist: () => {
+        lastFocusedAt = Date.now();
+        syncFocusMetadata();
+      },
+      onLayoutCommit: () => {
+        handleLayoutCommit();
+      },
+    });
+
+    const bringToFront = ({ persistFocus = true } = {}) => chrome.bringToFront({ persistFocus });
+
+    handleLayoutCommit = () => {
+      if (typeof options.onLayoutChange === 'function') {
+        options.onLayoutChange(chrome.getLayoutState());
+      }
+    };
+
     syncFocusMetadata();
 
-    const bringToFront = ({ persistFocus = true } = {}) => {
-      area.querySelectorAll('.workspace__window').forEach((otherWindow) => {
-        if (otherWindow !== windowElement) {
-          otherWindow.classList.remove('workspace__window--active');
-          otherWindow.dataset.windowActive = 'false';
-        }
+    const controls = header.querySelector('.workspace__window-controls');
+    const maximizeButton = document.createElement('button');
+    maximizeButton.type = 'button';
+    maximizeButton.className = 'workspace__window-maximize';
+    maximizeButton.textContent = '最大化';
+    maximizeButton.setAttribute('aria-pressed', 'false');
+    maximizeButton.addEventListener('click', () => {
+      chrome.toggleMaximize();
+      syncControlLabels();
+    });
+
+    if (controls instanceof HTMLElement) {
+      controls.insertBefore(maximizeButton, memoController?.closeButton ?? null);
+    } else {
+      header.append(maximizeButton);
+    }
+
+    chrome.setMaximizeControl(maximizeButton);
+
+    const resizeHandles = [];
+    resizeHandleDefinitions.forEach((definition) => {
+      const handle = chrome.createResizeHandle(definition);
+      resizeHandles.push(handle);
+      windowElement.append(handle);
+    });
+
+    const detachHeaderInteractions = chrome.attachHeader(header);
+    const detachWindowInteractions = chrome.attachWindowInteractions();
+
+    syncControlLabels = () => {
+      const title =
+        typeof memoController?.getTitle === 'function' ? memoController.getTitle() : 'メモ';
+
+      windowElement.setAttribute('aria-label', `${title} のウィンドウ`);
+
+      maximizeButton.setAttribute(
+        'aria-label',
+        chrome.isMaximized() ? `${title} を元のサイズに戻す` : `${title} を最大化`,
+      );
+
+      resizeHandles.forEach((handle) => {
+        handle.setAttribute('aria-label', `${title} のウィンドウサイズを変更`);
       });
-      windowElement.classList.add('workspace__window--active');
-      windowElement.dataset.windowActive = 'true';
-      area.dataset.activeWindowId = windowId;
-
-      if (persistFocus) {
-        lastFocusedAt = Date.now();
-      }
-
-      syncFocusMetadata();
-      return windowElement;
     };
+
+    syncControlLabels();
 
     if (typeof memoController?.setFocusDelegate === 'function') {
       memoController.setFocusDelegate(() => {
@@ -2839,75 +3095,24 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       });
     }
 
-    const getWindowBounds = () => {
-      const rect = windowElement.getBoundingClientRect();
-      const width =
-        rect.width ||
-        windowElement.clientWidth ||
-        windowElement.offsetWidth ||
-        initialWidth;
-      const height =
-        rect.height ||
-        windowElement.clientHeight ||
-        windowElement.offsetHeight ||
-        initialHeight;
-
-      return {
-        left: 0,
-        top: 0,
-        width,
-        height,
-      };
-    };
-
-    const getWindowSize = () => {
-      const bounds = getWindowBounds();
-      return { width: bounds.width, height: bounds.height };
-    };
-
-    const handleWindowFocus = () => {
-      bringToFront();
-    };
-
-    const handleWindowMouseDown = () => {
-      bringToFront();
-      windowElement.focus({ preventScroll: true });
-    };
-
-    const handleHeaderInteraction = () => {
-      bringToFront();
-    };
-
-    header.addEventListener('mousedown', handleHeaderInteraction);
-
-    const cleanupInteractions = () => {
-      header.removeEventListener('mousedown', handleHeaderInteraction);
-      windowElement.removeEventListener('focus', handleWindowFocus);
-      windowElement.removeEventListener('mousedown', handleWindowMouseDown);
-    };
-
     disposeWindow = ({ emitClose = true } = {}) => {
       if (disposed) {
         return;
       }
 
       disposed = true;
-      cleanupInteractions();
+      detachHeaderInteractions();
+      detachWindowInteractions();
+      chrome.destroy();
       windowElement.remove();
       windowRegistry.delete(windowId);
       syncEmptyState();
-
-      if (emitClose) {
-        // Memo windows are lightweight; no persistence is attempted.
-      }
 
       if (typeof options.onDispose === 'function') {
         options.onDispose();
       }
     };
 
-    windowElement.addEventListener('focus', handleWindowFocus);
-    windowElement.addEventListener('mousedown', handleWindowMouseDown);
     area.append(windowElement);
 
     windowRegistry.set(windowId, {
