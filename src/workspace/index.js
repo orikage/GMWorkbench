@@ -8,7 +8,7 @@ import {
   persistWorkspacePreference,
 } from '../workspace-storage.js';
 import { createWindowCanvas } from './canvas.js';
-import { createHint } from './chrome.js';
+import { createHeader, createHint } from './chrome.js';
 import { createDropZone } from './drop-zone.js';
 import { createFileQueue } from './file-queue.js';
 import { createMaintenancePanel } from './maintenance.js';
@@ -21,9 +21,15 @@ import {
   WORKSPACE_SESSION_IMPORTED_EVENT,
   WORKSPACE_MENU_CHANGE_EVENT,
   WORKSPACE_QUICK_MEMO_REQUEST_EVENT,
+  WINDOW_CLOSE_EVENT,
+  WINDOW_FOCUS_CYCLE_EVENT,
+  WINDOW_MAXIMIZE_CHANGE_EVENT,
+  WINDOW_PIN_TOGGLE_EVENT,
+  WINDOW_TITLE_CHANGE_EVENT,
 } from './constants.js';
 import { formatSnapshotTimestamp } from './utils.js';
 import { applyWorkspaceTheme } from './theme.js';
+import { createWindowLayers } from './window-layers.js';
 
 export function createWorkspace() {
   const workspace = document.createElement('div');
@@ -31,6 +37,7 @@ export function createWorkspace() {
   workspace.dataset.role = 'workspace';
   applyWorkspaceTheme(workspace);
 
+  const header = createHeader();
   const quickPanel = createHint();
   const menu = createWorkspaceMenu();
   const panels = new Map();
@@ -39,6 +46,50 @@ export function createWorkspace() {
   let onboarding = null;
   let stageOverlay = null;
   let stageHint = null;
+  let layersOverlay = null;
+
+  const layersButton = header.querySelector(
+    '.workspace__utility-button[data-utility-id="layers"]',
+  );
+
+  const syncLayersDataset = (open) => {
+    if (open) {
+      workspace.dataset.utilityLayers = 'open';
+    } else {
+      delete workspace.dataset.utilityLayers;
+    }
+  };
+
+  const setLayersOverlayOpen = (open) => {
+    const controller = layersOverlay;
+
+    if (!controller) {
+      syncLayersDataset(open);
+      return;
+    }
+
+    const element = controller.element;
+
+    if (open) {
+      syncLayersDataset(true);
+      element.hidden = false;
+      element.setAttribute('aria-hidden', 'false');
+      controller.update();
+    } else {
+      syncLayersDataset(false);
+      element.hidden = true;
+      element.setAttribute('aria-hidden', 'true');
+    }
+  };
+
+  const toggleLayersOverlay = () => {
+    const isOpen = workspace.dataset.utilityLayers === 'open';
+    setLayersOverlayOpen(!isOpen);
+  };
+
+  if (layersButton instanceof HTMLButtonElement) {
+    layersButton.addEventListener('click', toggleLayersOverlay);
+  }
 
   const syncPanelVisibility = () => {
     const activeMenuId = menu.getActiveId?.();
@@ -132,6 +183,56 @@ export function createWorkspace() {
       updateOnboardingVisibility(count);
     },
   });
+  layersOverlay = createWindowLayers({ canvas });
+  layersOverlay.element.hidden = true;
+  layersOverlay.element.setAttribute('aria-hidden', 'true');
+
+  const updateLayersOverlay = () => {
+    if (layersOverlay) {
+      layersOverlay.update();
+    }
+  };
+
+  const wrapCanvasMethod = (method) => {
+    if (!canvas || typeof canvas[method] !== 'function') {
+      return;
+    }
+
+    const original = canvas[method].bind(canvas);
+
+    canvas[method] = (...args) => {
+      const result = original(...args);
+      updateLayersOverlay();
+      return result;
+    };
+  };
+
+  wrapCanvasMethod('openWindow');
+  wrapCanvasMethod('closeAllWindows');
+  wrapCanvasMethod('focusWindow');
+  wrapCanvasMethod('cycleFocus');
+
+  if (canvas?.element instanceof HTMLElement) {
+    const refreshEvents = [
+      WINDOW_CLOSE_EVENT,
+      WINDOW_PIN_TOGGLE_EVENT,
+      WINDOW_TITLE_CHANGE_EVENT,
+      WINDOW_MAXIMIZE_CHANGE_EVENT,
+      WINDOW_FOCUS_CYCLE_EVENT,
+    ];
+
+    const handleCanvasMutation = () => {
+      updateLayersOverlay();
+    };
+
+    refreshEvents.forEach((type) => {
+      canvas.element.addEventListener(type, handleCanvasMutation);
+    });
+
+    canvas.element.addEventListener('focusin', handleCanvasMutation);
+  }
+
+  setLayersOverlayOpen(false);
   updateOnboardingVisibility(canvas.getWindowCount());
   const maintenance = createMaintenancePanel({
     onClear: async () => {
@@ -506,7 +607,11 @@ export function createWorkspace() {
   registerPanel('log', [logNote, maintenance.element]);
 
   layout.append(stage, menuSurface);
-  workspace.append(layout);
+  workspace.append(header, layout);
+
+  if (layersOverlay?.element instanceof HTMLElement) {
+    workspace.append(layersOverlay.element);
+  }
 
   syncPanelVisibility();
   updateOnboardingVisibility();

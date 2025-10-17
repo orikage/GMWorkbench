@@ -272,7 +272,8 @@ describe('createWorkspace', () => {
     expect(logPanel?.querySelector('.workspace__maintenance')).not.toBeNull();
     expect(workspace.querySelector('.workspace__menu')).not.toBeNull();
     expect(workspace.querySelector('.workspace__floating')).toBeNull();
-    expect(workspace.querySelector('.workspace__app-bar')).toBeNull();
+    expect(workspace.querySelector('.workspace__app-bar')).not.toBeNull();
+    expect(workspace.querySelector('.workspace__layers')).not.toBeNull();
   });
 
   it('provides hover titles for the primary workspace actions', async () => {
@@ -319,6 +320,78 @@ describe('createWorkspace', () => {
     const mapButton = workspace.querySelector('[data-menu-id="map"]');
     mapButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(workspace.dataset.activeMenu).toBe('map');
+  });
+
+  it('toggles the layers overlay when the utility button is pressed', async () => {
+    const workspace = createWorkspace();
+    const button = workspace.querySelector(
+      '.workspace__utility-button[data-utility-id="layers"]',
+    );
+    const overlay = workspace.querySelector('.workspace__layers');
+
+    expect(button).toBeInstanceOf(HTMLButtonElement);
+    expect(overlay).toBeInstanceOf(HTMLElement);
+    expect(workspace.dataset.utilityLayers).toBeUndefined();
+    expect(overlay?.hidden).toBe(true);
+
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(workspace.dataset.utilityLayers).toBe('open');
+    expect(overlay?.hidden).toBe(false);
+
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(workspace.dataset.utilityLayers).toBeUndefined();
+    expect(overlay?.hidden).toBe(true);
+  });
+
+  it('lists open windows inside the layers overlay and focuses a selected window', async () => {
+    const workspace = createWorkspace();
+    const button = workspace.querySelector(
+      '.workspace__utility-button[data-utility-id="layers"]',
+    );
+
+    const firstFile = new File(['one'], 'layers-first.pdf', { type: 'application/pdf' });
+    const secondFile = new File(['two'], 'layers-second.pdf', { type: 'application/pdf' });
+
+    await openWindow(workspace, firstFile);
+    await openWindow(workspace, secondFile);
+
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    const overlay = workspace.querySelector('.workspace__layers');
+    const items = workspace.querySelectorAll('.workspace__layers-item');
+
+    expect(overlay).toBeInstanceOf(HTMLElement);
+    expect(items.length).toBe(2);
+
+    const windows = workspace.querySelectorAll('.workspace__window');
+    const firstWindow = windows[0];
+    const secondWindow = windows[1];
+
+    expect(firstWindow).toBeInstanceOf(HTMLElement);
+    expect(secondWindow).toBeInstanceOf(HTMLElement);
+
+    if (!(firstWindow instanceof HTMLElement) || !(secondWindow instanceof HTMLElement)) {
+      throw new Error('window elements should exist for the layers overlay test');
+    }
+
+    const targetItem = workspace.querySelector(
+      `.workspace__layers-item[data-window-id="${firstWindow.dataset.windowId}"]`,
+    );
+    const focusButton = targetItem?.querySelector('.workspace__layers-focus');
+
+    expect(targetItem).toBeInstanceOf(HTMLElement);
+    expect(focusButton).toBeInstanceOf(HTMLButtonElement);
+
+    focusButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(firstWindow.dataset.windowActive).toBe('true');
+    expect(secondWindow.dataset.windowActive).toBe('false');
   });
 
   it('shows onboarding guidance when no windows are open and restores it after closing the last window', async () => {
