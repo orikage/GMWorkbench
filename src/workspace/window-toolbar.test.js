@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MIN_WINDOW_WIDTH } from './constants.js';
 import { createWindowToolbar } from './window-toolbar.js';
 
 const createToolbar = () => {
   const windowElement = document.createElement('div');
 
-  return createWindowToolbar({
+  const controller = createWindowToolbar({
     windowElement,
     bringToFront: vi.fn(),
     sanitizePageValue: (value) => {
@@ -24,6 +25,8 @@ const createToolbar = () => {
     commitZoomChange: vi.fn(),
     onSyncRequest: vi.fn(),
   });
+
+  return Object.assign(controller, { windowElement });
 };
 
 describe('createWindowToolbar', () => {
@@ -65,5 +68,49 @@ describe('createWindowToolbar', () => {
     expect(firstPageButton?.hasAttribute('title')).toBe(false);
     expect(zoomFitButton).toBeInstanceOf(HTMLButtonElement);
     expect(zoomFitButton?.hasAttribute('title')).toBe(false);
+  });
+
+  it('toggles compact mode based on observed window width', () => {
+    const originalResizeObserver = global.ResizeObserver;
+    const observers = [];
+
+    class MockResizeObserver {
+      constructor(callback) {
+        this.callback = callback;
+        observers.push(this);
+      }
+
+      observe(target) {
+        this.target = target;
+      }
+
+      disconnect() {}
+    }
+
+    // @ts-expect-error allow override for tests
+    global.ResizeObserver = MockResizeObserver;
+
+    try {
+      const toolbar = createToolbar();
+
+      expect(toolbar.element.classList.contains('workspace__window-toolbar--compact')).toBe(false);
+
+      const observer = observers[0];
+      expect(observer).toBeDefined();
+
+      observer.callback([
+        { target: toolbar.windowElement, contentRect: { width: MIN_WINDOW_WIDTH } },
+      ]);
+
+      expect(toolbar.element.classList.contains('workspace__window-toolbar--compact')).toBe(true);
+
+      observer.callback([
+        { target: toolbar.windowElement, contentRect: { width: MIN_WINDOW_WIDTH + 160 } },
+      ]);
+
+      expect(toolbar.element.classList.contains('workspace__window-toolbar--compact')).toBe(false);
+    } finally {
+      global.ResizeObserver = originalResizeObserver;
+    }
   });
 });
