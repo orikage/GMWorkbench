@@ -412,3 +412,78 @@ describe('workspace window layout', () => {
     expect(secondWindow.dataset.windowActive).toBe('false');
   });
 });
+
+describe('workspace menu utilities', () => {
+  it('activates the browser panel when the reference utility button is clicked', async () => {
+    const workspace = createWorkspace();
+    document.body.append(workspace);
+
+    const browserPanel = workspace.querySelector(
+      '.workspace__menu-panel[data-menu-panel="browser"]',
+    );
+    const npcMenuButton = workspace.querySelector(
+      '.workspace__menu-button[data-menu-id="npc"]',
+    );
+    const referenceButton = workspace.querySelector(
+      '.workspace__utility-button[data-utility-id="reference"]',
+    );
+
+    expect(browserPanel).toBeInstanceOf(HTMLElement);
+    expect(npcMenuButton).toBeInstanceOf(HTMLButtonElement);
+    expect(referenceButton).toBeInstanceOf(HTMLButtonElement);
+
+    if (
+      !(browserPanel instanceof HTMLElement) ||
+      !(npcMenuButton instanceof HTMLButtonElement) ||
+      !(referenceButton instanceof HTMLButtonElement)
+    ) {
+      throw new Error('menu utilities require browser panel, npc button, and reference button');
+    }
+
+    npcMenuButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(browserPanel.hidden).toBe(true);
+
+    referenceButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(workspace.dataset.activeMenu).toBe('browser');
+    expect(browserPanel.hidden).toBe(false);
+  });
+
+  it('activates the log panel when the settings utility button is clicked', async () => {
+    const workspace = createWorkspace();
+    document.body.append(workspace);
+
+    const browserPanel = workspace.querySelector(
+      '.workspace__menu-panel[data-menu-panel="browser"]',
+    );
+    const logPanel = workspace.querySelector('.workspace__menu-panel[data-menu-panel="log"]');
+    const settingsButton = workspace.querySelector(
+      '.workspace__utility-button[data-utility-id="settings"]',
+    );
+
+    expect(browserPanel).toBeInstanceOf(HTMLElement);
+    expect(logPanel).toBeInstanceOf(HTMLElement);
+    expect(settingsButton).toBeInstanceOf(HTMLButtonElement);
+
+    if (
+      !(browserPanel instanceof HTMLElement) ||
+      !(logPanel instanceof HTMLElement) ||
+      !(settingsButton instanceof HTMLButtonElement)
+    ) {
+      throw new Error('menu utilities require browser, log panels and settings button');
+    }
+
+    expect(browserPanel.hidden).toBe(false);
+    expect(logPanel.hidden).toBe(true);
+
+    settingsButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+
+    expect(workspace.dataset.activeMenu).toBe('log');
+    expect(browserPanel.hidden).toBe(true);
+    expect(logPanel.hidden).toBe(false);
+  });
+});

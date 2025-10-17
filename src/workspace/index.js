@@ -48,9 +48,15 @@ export function createWorkspace() {
   let stageHint = null;
   let layersOverlay = null;
 
-  const layersButton = header.querySelector(
-    '.workspace__utility-button[data-utility-id="layers"]',
-  );
+  const getUtilityButton = (id) =>
+    header.querySelector(`.workspace__utility-button[data-utility-id="${id}"]`);
+
+  const layersButton = getUtilityButton('layers');
+
+  const utilityMenuTargets = new Map([
+    ['reference', 'browser'],
+    ['settings', 'log'],
+  ]);
 
   const syncLayersDataset = (open) => {
     if (open) {
@@ -106,6 +112,25 @@ export function createWorkspace() {
     });
   };
 
+  const activateMenuPanel = (panelId) => {
+    if (typeof menu?.setActive !== 'function') {
+      return;
+    }
+
+    if (typeof panelId !== 'string' || panelId.length === 0) {
+      return;
+    }
+
+    menu.setActive(panelId);
+
+    const activeMenuId = menu.getActiveId?.();
+
+    if (activeMenuId === panelId) {
+      workspace.dataset.activeMenu = panelId;
+      syncPanelVisibility();
+    }
+  };
+
   const syncMenuDataset = () => {
     const activeMenuId = menu.getActiveId?.();
 
@@ -120,6 +145,18 @@ export function createWorkspace() {
   };
 
   syncMenuDataset();
+
+  utilityMenuTargets.forEach((panelId, utilityId) => {
+    const button = getUtilityButton(utilityId);
+
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.addEventListener('click', () => {
+      activateMenuPanel(panelId);
+    });
+  });
 
   workspace.addEventListener(WORKSPACE_MENU_CHANGE_EVENT, (event) => {
     const id = typeof event?.detail?.id === 'string' ? event.detail.id : '';
