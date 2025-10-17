@@ -68,6 +68,12 @@ body {
     box-shadow 120ms ease;
 }
 
+.workspace__control:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+}
+
 .workspace__control:focus,
 .workspace__control:hover {
   outline: none;
@@ -422,21 +428,13 @@ body {
   color: var(--workspace-text-secondary);
 }
 
-.workspace__button {
+.workspace__drop-zone-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 12px 28px;
-  border-radius: var(--workspace-corner-radius);
-  border: 1px solid var(--workspace-accent);
-  background: var(--workspace-accent);
-  color: #ffffff;
   font-weight: 600;
-  cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-
-.workspace__button:focus,
-.workspace__button:hover {
-  background: var(--workspace-accent-strong);
-  border-color: var(--workspace-accent-strong);
+  font-size: 0.95rem;
 }
 
 .workspace__file-input {
@@ -758,67 +756,41 @@ body {
   align-items: center;
 }
 
-.workspace__maintenance-button {
+.workspace__maintenance-action {
   justify-self: start;
   padding: 10px 24px;
-  border-radius: var(--workspace-corner-radius);
-  border: 1px solid var(--workspace-border);
-  background: var(--workspace-panel);
-  color: var(--workspace-text-secondary);
   font-weight: 600;
   font-size: 0.9rem;
-  cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
-.workspace__maintenance-button:focus,
-.workspace__maintenance-button:hover {
-  outline: none;
-  border-color: var(--workspace-accent);
-  background: var(--workspace-accent-muted);
-  color: var(--workspace-text-primary);
-}
-
-.workspace__maintenance-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-  transform: none;
-}
-
-.workspace__maintenance-button--clear {
+.workspace__maintenance-action--clear {
   border-color: #b64a4a;
-  background: rgba(182, 74, 74, 0.18);
-  color: #ffd9d9;
+  background: rgba(182, 74, 74, 0.16);
+  color: #8c2d2d;
 }
 
-.workspace__maintenance-button--clear:focus,
-.workspace__maintenance-button--clear:hover {
-  background: rgba(182, 74, 74, 0.32);
+.workspace__maintenance-action--clear:focus,
+.workspace__maintenance-action--clear:hover {
   border-color: #da6363;
+  background: rgba(182, 74, 74, 0.26);
+  color: #6d1f1f;
 }
 
-.workspace__maintenance-button--export {
-  border-color: var(--workspace-accent);
-  background: var(--workspace-accent-muted);
-  color: var(--workspace-text-primary);
+.workspace__maintenance-action--export {
+  letter-spacing: 0.01em;
 }
 
-.workspace__maintenance-button--export:focus,
-.workspace__maintenance-button--export:hover {
-  background: rgba(22, 160, 133, 0.24);
-  border-color: var(--workspace-accent-strong);
-}
-
-.workspace__maintenance-button--import {
+.workspace__maintenance-action--import {
   border-color: #3fa58f;
-  background: rgba(63, 165, 143, 0.18);
+  background: rgba(63, 165, 143, 0.16);
   color: #245746;
 }
 
-.workspace__maintenance-button--import:focus,
-.workspace__maintenance-button--import:hover {
-  background: rgba(63, 165, 143, 0.32);
+.workspace__maintenance-action--import:focus,
+.workspace__maintenance-action--import:hover {
   border-color: #58c7ae;
+  background: rgba(63, 165, 143, 0.26);
+  color: #1b4437;
 }
 
 .workspace__maintenance-file {

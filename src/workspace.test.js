@@ -278,11 +278,11 @@ describe('createWorkspace', () => {
   it('provides hover titles for the primary workspace actions', async () => {
     const workspace = createWorkspace();
 
-    const dropZoneButton = workspace.querySelector('.workspace__button');
+    const dropZoneButton = workspace.querySelector('.workspace__drop-zone-button');
     expect(dropZoneButton).toBeInstanceOf(HTMLButtonElement);
     expect(dropZoneButton?.getAttribute('title')).toBe('PDFを開く');
 
-    const maintenanceButtons = workspace.querySelectorAll('.workspace__maintenance-button');
+    const maintenanceButtons = workspace.querySelectorAll('.workspace__maintenance-action');
     expect(maintenanceButtons.length).toBeGreaterThan(0);
     maintenanceButtons.forEach((element) => {
       expect(element).toBeInstanceOf(HTMLButtonElement);
@@ -3112,7 +3112,7 @@ describe('createWorkspace', () => {
       }),
     );
 
-    const button = workspace.querySelector('.workspace__maintenance-button--clear');
+    const button = workspace.querySelector('.workspace__maintenance-action--clear');
 
     if (!button) {
       throw new Error('maintenance control is required');
@@ -3156,7 +3156,7 @@ describe('createWorkspace', () => {
     await openWindow(workspace, file);
     await flushPromises();
 
-    const button = workspace.querySelector('.workspace__maintenance-button--clear');
+    const button = workspace.querySelector('.workspace__maintenance-action--clear');
 
     if (!button) {
       throw new Error('maintenance control is required');
@@ -3186,7 +3186,7 @@ describe('createWorkspace', () => {
 
     storageMocks.clear.mockRejectedValueOnce(new Error('failed to clear'));
 
-    const button = workspace.querySelector('.workspace__maintenance-button--clear');
+    const button = workspace.querySelector('.workspace__maintenance-action--clear');
 
     if (!button) {
       throw new Error('maintenance control is required');
@@ -3226,7 +3226,7 @@ describe('createWorkspace', () => {
       compression: 'none',
     });
 
-    const exportButton = workspace.querySelector('.workspace__maintenance-button--export');
+    const exportButton = workspace.querySelector('.workspace__maintenance-action--export');
 
     if (!exportButton) {
       throw new Error('maintenance export control is required');
@@ -3276,7 +3276,7 @@ describe('createWorkspace', () => {
     await flushPromises();
 
     const scopeOpen = workspace.querySelector('input[value="open"]');
-    const exportButton = workspace.querySelector('.workspace__maintenance-button--export');
+    const exportButton = workspace.querySelector('.workspace__maintenance-action--export');
 
     if (!(scopeOpen instanceof HTMLInputElement) || !exportButton) {
       throw new Error('maintenance export controls are required');
@@ -3325,7 +3325,7 @@ describe('createWorkspace', () => {
       exportedAt: '2025-10-12T00:00:00.000Z',
     });
 
-    const importButton = workspace.querySelector('.workspace__maintenance-button--import');
+    const importButton = workspace.querySelector('.workspace__maintenance-action--import');
     const fileInput = workspace.querySelector('.workspace__maintenance-file');
 
     if (!importButton || !(fileInput instanceof HTMLInputElement)) {
