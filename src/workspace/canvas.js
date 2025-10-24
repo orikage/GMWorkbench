@@ -170,6 +170,88 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     const resizeHandles = [];
     let maximizeButton = null;
     let ignorePointerPredicate = null;
+    const MIN_TITLE_INLINE_RESERVE = 140;
+    const MAX_TITLE_INLINE_RESERVE = 280;
+    const HEADER_INLINE_GAP = 12;
+
+    const headerCompactState = {
+      expandedControlsInlineSize: 0,
+      sync() {
+        const currentlyCompact = windowElement.classList.contains('workspace__window--compact-header');
+        let shouldCompact = layoutState.width < MIN_WINDOW_WIDTH;
+
+        if (!shouldCompact) {
+          const headerElement = windowElement.querySelector('.workspace__window-header');
+
+          if (headerElement instanceof HTMLElement) {
+            const controlsElement = headerElement.querySelector('.workspace__window-controls');
+
+            if (controlsElement instanceof HTMLElement) {
+              const headerInlineSize = Math.round(headerElement.clientWidth);
+
+              if (headerInlineSize > 0) {
+                const measuredControlsInlineSize = Math.round(controlsElement.scrollWidth);
+
+                if (!currentlyCompact) {
+                  this.expandedControlsInlineSize = Math.max(
+                    this.expandedControlsInlineSize,
+                    measuredControlsInlineSize,
+                  );
+                }
+
+                const effectiveControlsInlineSize = currentlyCompact
+                  ? Math.max(this.expandedControlsInlineSize, measuredControlsInlineSize)
+                  : measuredControlsInlineSize;
+
+                const titleGroupElement = headerElement.querySelector('.workspace__window-title-group');
+                const rawTitleInlineSize =
+                  titleGroupElement instanceof HTMLElement
+                    ? Math.round(
+                        Math.max(
+                          titleGroupElement.scrollWidth || titleGroupElement.clientWidth || 0,
+                          MIN_TITLE_INLINE_RESERVE,
+                        ),
+                      )
+                    : MIN_TITLE_INLINE_RESERVE;
+
+                const reservedTitleInlineSize = Math.min(
+                  Math.max(rawTitleInlineSize, MIN_TITLE_INLINE_RESERVE),
+                  MAX_TITLE_INLINE_RESERVE,
+                  headerInlineSize,
+                );
+
+                const requiredInlineSize =
+                  effectiveControlsInlineSize +
+                  reservedTitleInlineSize +
+                  (effectiveControlsInlineSize > 0 ? HEADER_INLINE_GAP : 0);
+
+                shouldCompact = requiredInlineSize > headerInlineSize;
+              }
+            }
+          }
+        }
+
+        if (shouldCompact !== currentlyCompact) {
+          windowElement.classList.toggle('workspace__window--compact-header', shouldCompact);
+        }
+
+        windowElement.dataset.windowCompactHeader = shouldCompact ? 'true' : 'false';
+      },
+      schedule() {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => {
+            this.sync();
+          });
+          return;
+        }
+
+        setTimeout(() => {
+          this.sync();
+        }, 0);
+      },
+    };
+
+    windowElement.__headerCompactState = headerCompactState;
 
     const preferredWidth = Number.isFinite(layout.width)
       ? Math.round(layout.width)
@@ -212,13 +294,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         : bounds.height,
     };
 
-    const syncHeaderCompactState = () => {
-      const isCompact = layoutState.width < MIN_WINDOW_WIDTH;
-
-      windowElement.classList.toggle('workspace__window--compact-header', isCompact);
-      windowElement.dataset.windowCompactHeader = isCompact ? 'true' : 'false';
-    };
-
     const applyLayoutState = () => {
       windowElement.style.left = `${layoutState.left}px`;
       windowElement.style.top = `${layoutState.top}px`;
@@ -228,7 +303,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       windowElement.dataset.windowTop = String(layoutState.top);
       windowElement.dataset.windowWidth = String(layoutState.width);
       windowElement.dataset.windowHeight = String(layoutState.height);
-      syncHeaderCompactState();
+      windowElement.__headerCompactState?.sync?.();
     };
 
     applyLayoutState();
@@ -1049,6 +1124,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       detachHeaderInteractions();
       detachWindowInteractions();
       chrome.destroy();
+      delete windowElement.__headerCompactState;
 
       if (emitClose) {
         dispatchCloseEvent();
@@ -2340,7 +2416,6 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     const header = document.createElement('header');
     header.className = 'workspace__window-header';
-
     const titleGroup = document.createElement('div');
     titleGroup.className = 'workspace__window-title-group';
 
@@ -2384,6 +2459,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       windowElement.classList.toggle('workspace__window--pinned', pinned);
       pinButton.setAttribute('aria-pressed', pinned ? 'true' : 'false');
       pinButton.textContent = pinned ? 'ピン解除' : 'ピン留め';
+
+      windowElement.__headerCompactState?.schedule?.();
     };
 
     pinButton.addEventListener('click', () => {
@@ -2456,6 +2533,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         'aria-label',
         `${windowTitle} の色を切り替え (現在: ${label})`,
       );
+
+      windowElement.__headerCompactState?.schedule?.();
     };
 
     const syncWindowColorDisplay = () => {
@@ -2530,6 +2609,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       });
 
       syncColorButton();
+      windowElement.__headerCompactState?.schedule?.();
     };
 
     const syncWindowTitleDisplay = () => {
@@ -2543,6 +2623,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       windowElement.dataset.windowTitle = windowTitle;
       syncControlLabels();
       syncBookmarksState();
+      windowElement.__headerCompactState?.schedule?.();
     };
 
     const finishTitleEdit = ({ commit }) => {
@@ -2567,6 +2648,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       renameButton.setAttribute('aria-label', `${windowTitle} のタイトルを変更`);
 
       syncWindowTitleDisplay();
+
+      windowElement.__headerCompactState?.schedule?.();
 
       if (commit && windowTitle !== previousTitle) {
         const titleEvent = new CustomEvent(WINDOW_TITLE_CHANGE_EVENT, {
@@ -2597,6 +2680,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         titleInput.focus({ preventScroll: true });
         titleInput.select();
       });
+
+      windowElement.__headerCompactState?.schedule?.();
     };
 
     renameButton.addEventListener('click', () => {
@@ -2796,6 +2881,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       });
 
     windowElement.append(header, body);
+    windowElement.__headerCompactState?.sync?.();
 
     chrome.setPointerIgnorePredicate(() => editingTitle);
     resizeHandleDefinitions.forEach((definition) => {
