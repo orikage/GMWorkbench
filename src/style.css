@@ -1056,8 +1056,9 @@ body {
 
 .workspace__window-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--workspace-border);
   background: var(--workspace-panel);
@@ -1078,7 +1079,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
+  flex: 1 1 160px;
   min-width: 0;
 }
 
@@ -1120,6 +1121,11 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+  max-width: 100%;
 }
 
 .workspace__window--compact-header .workspace__window-controls {
