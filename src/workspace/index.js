@@ -295,9 +295,9 @@ export function createWorkspace() {
       const windowIds =
         normalizedScope === 'open'
           ? canvas
-              .getWindowEntries()
-              .map((entry) => entry.id)
-              .filter((id) => typeof id === 'string' && id.length > 0)
+            .getWindowEntries()
+            .map((entry) => entry.id)
+            .filter((id) => typeof id === 'string' && id.length > 0)
           : null;
 
       if (windowIds && windowIds.length === 0) {
@@ -606,7 +606,8 @@ export function createWorkspace() {
   // Create Sidebar Container
   const sidebar = document.createElement('aside');
   sidebar.className = 'workspace__sidebar';
-  sidebar.hidden = true; // Default hidden on mobile, controlled by toggle
+  // Default hidden on mobile (< 768px), visible on desktop
+  sidebar.hidden = window.innerWidth < 768;
 
   const menuSurface = document.createElement('div');
   menuSurface.className = 'workspace__menu-surface';
@@ -615,7 +616,7 @@ export function createWorkspace() {
   const panelsContainer = document.createElement('div');
   panelsContainer.className = 'workspace__menu-panels';
   menuSurface.append(panelsContainer);
-  
+
   sidebar.append(menuSurface);
 
   const registerPanel = (id, nodes) => {
