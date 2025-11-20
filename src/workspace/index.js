@@ -603,13 +603,20 @@ export function createWorkspace() {
   stageOverlay.append(stageContentFragment);
   canvas.element.append(stageOverlay);
 
-  const menuSurface = document.createElement('aside');
+  // Create Sidebar Container
+  const sidebar = document.createElement('aside');
+  sidebar.className = 'workspace__sidebar';
+  sidebar.hidden = true; // Default hidden on mobile, controlled by toggle
+
+  const menuSurface = document.createElement('div');
   menuSurface.className = 'workspace__menu-surface';
   menuSurface.append(menu.element);
 
   const panelsContainer = document.createElement('div');
   panelsContainer.className = 'workspace__menu-panels';
   menuSurface.append(panelsContainer);
+  
+  sidebar.append(menuSurface);
 
   const registerPanel = (id, nodes) => {
     const panel = document.createElement('section');
@@ -644,12 +651,36 @@ export function createWorkspace() {
   logNote.textContent = '保存データの書き出し・読み込みとキャッシュ管理を行えます。';
   registerPanel('log', [logNote, maintenance.element]);
 
-  appBarMain.append(menuSurface);
-  workspace.append(header, stage);
+  // Main Container (Flex Row)
+  const container = document.createElement('div');
+  container.className = 'workspace__container';
+  container.append(stage, sidebar);
+
+  workspace.append(header, container);
 
   if (layersOverlay?.element instanceof HTMLElement) {
     stage.append(layersOverlay.element);
   }
+
+  // Sidebar toggle logic
+  const toggleSidebar = () => {
+    const isHidden = sidebar.hidden;
+    sidebar.hidden = !isHidden;
+    workspace.dataset.sidebarOpen = (!isHidden).toString();
+  };
+
+  // Update utility buttons to toggle sidebar instead of just activating panel
+  utilityMenuTargets.forEach((panelId, utilityId) => {
+    const button = getUtilityButton(utilityId);
+    if (button instanceof HTMLButtonElement) {
+      button.addEventListener('click', () => {
+        activateMenuPanel(panelId);
+        if (sidebar.hidden) {
+          sidebar.hidden = false;
+        }
+      });
+    }
+  });
 
   syncPanelVisibility();
   updateOnboardingVisibility();
