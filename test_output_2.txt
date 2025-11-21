@@ -1,0 +1,6 @@
+[1A[2K[2m[WebServer] [22m'pnpm' �́A�����R�}���h�܂��͊O���R�}���h�A
+[2m[WebServer] [22m����\�ȃv���O�����܂��̓o�b�` �t�@�C���Ƃ��ĔF������Ă��܂���B
+
+Error: Process from config.webServer was not able to start. Exit code: 1
+
+[1A[2K

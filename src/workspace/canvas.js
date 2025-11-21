@@ -207,11 +207,11 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
                 const rawTitleInlineSize =
                   titleGroupElement instanceof HTMLElement
                     ? Math.round(
-                        Math.max(
-                          titleGroupElement.scrollWidth || titleGroupElement.clientWidth || 0,
-                          MIN_TITLE_INLINE_RESERVE,
-                        ),
-                      )
+                      Math.max(
+                        titleGroupElement.scrollWidth || titleGroupElement.clientWidth || 0,
+                        MIN_TITLE_INLINE_RESERVE,
+                      ),
+                    )
                     : MIN_TITLE_INLINE_RESERVE;
 
                 const reservedTitleInlineSize = Math.min(
@@ -554,7 +554,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     const attachHeader = (header) => {
       if (!(header instanceof HTMLElement)) {
-        return () => {};
+        return () => { };
       }
 
       const handleHeaderPointerDown = (event) => {
@@ -908,10 +908,10 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     const shouldStartMaximized = options.maximized === true;
     const shouldAutoFocus = options.autoFocus !== false;
 
-    let schedulePersist = () => {};
-    let handleLayoutCommit = () => {};
-    let handleMaximizeChange = () => {};
-    let handleFocusPersist = () => {};
+    let schedulePersist = () => { };
+    let handleLayoutCommit = () => { };
+    let handleMaximizeChange = () => { };
+    let handleFocusPersist = () => { };
 
     const chrome = createWindowChrome({
       windowElement,
@@ -952,8 +952,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     const initialHistory = Array.isArray(options.pageHistory)
       ? options.pageHistory
-          .map(sanitizeHistoryValue)
-          .filter((value) => Number.isFinite(value))
+        .map(sanitizeHistoryValue)
+        .filter((value) => Number.isFinite(value))
       : [];
 
     let pageHistory = initialHistory.length > 0 ? initialHistory.slice() : [currentPage];
@@ -1011,8 +1011,8 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     const initialBookmarks = Array.isArray(options.bookmarks)
       ? options.bookmarks
-          .map(sanitizeBookmarkValue)
-          .filter((value) => Number.isFinite(value))
+        .map(sanitizeBookmarkValue)
+        .filter((value) => Number.isFinite(value))
       : [];
 
     let bookmarks = Array.from(new Set(initialBookmarks)).sort((a, b) => a - b);
@@ -1145,7 +1145,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       }
 
       if (persistRemoval) {
-        removeWorkspaceWindow(windowId).catch(() => {});
+        removeWorkspaceWindow(windowId).catch(() => { });
       }
     };
 
@@ -1215,7 +1215,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
             hasStoredFile = true;
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
 
     schedulePersist = ({ includeFile = false, flush = false } = {}) => {
@@ -1586,7 +1586,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         return bookmarksWindowEntry.element;
       }
 
-      let disposeBookmarksWindow = () => {};
+      let disposeBookmarksWindow = () => { };
 
       const controller = createBookmarksWindow({
         title: getBookmarksWindowTitle(),
@@ -2712,6 +2712,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     });
 
     duplicateButton.addEventListener('click', () => {
+      const layout = chrome.getLayoutState();
       const duplicateElement = openWindow(file, {
         page: currentPage,
         zoom: currentZoom,
@@ -2724,15 +2725,15 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         pageHistoryIndex,
         color: windowColor,
         bookmarks: bookmarks.slice(),
-        maximized: isMaximized,
-        left: layoutState.left + 24,
-        top: layoutState.top + 24,
-        width: layoutState.width,
-        height: layoutState.height,
-        restoreLeft: layoutState.restoreLeft,
-        restoreTop: layoutState.restoreTop,
-        restoreWidth: layoutState.restoreWidth,
-        restoreHeight: layoutState.restoreHeight,
+        maximized: chrome.isMaximized(),
+        left: layout.left + 24,
+        top: layout.top + 24,
+        width: layout.width,
+        height: layout.height,
+        restoreLeft: layout.restoreLeft,
+        restoreTop: layout.restoreTop,
+        restoreWidth: layout.restoreWidth,
+        restoreHeight: layout.restoreHeight,
       });
 
       if (!duplicateElement) {
@@ -2752,15 +2753,15 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
           notes: windowNotes,
           title: windowTitle,
           color: windowColor,
-          maximized: isMaximized,
-          left: layoutState.left,
-          top: layoutState.top,
-          width: layoutState.width,
-          height: layoutState.height,
-          restoreLeft: layoutState.restoreLeft,
-          restoreTop: layoutState.restoreTop,
-          restoreWidth: layoutState.restoreWidth,
-          restoreHeight: layoutState.restoreHeight,
+          maximized: chrome.isMaximized(),
+          left: layout.left,
+          top: layout.top,
+          width: layout.width,
+          height: layout.height,
+          restoreLeft: layout.restoreLeft,
+          restoreTop: layout.restoreTop,
+          restoreWidth: layout.restoreWidth,
+          restoreHeight: layout.restoreHeight,
           bookmarks: bookmarks.slice(),
         },
       });
@@ -2866,7 +2867,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         schedulePersist();
         return renderCurrentPage();
       })
-      .catch(() => {});
+      .catch(() => { });
 
     void viewer
       .getOutlineEntries()
@@ -3032,9 +3033,9 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         ? options.id
         : createWindowId('memo');
 
-    let disposeWindow = () => {};
+    let disposeWindow = () => { };
 
-    let syncControlLabels = () => {};
+    let syncControlLabels = () => { };
 
     const memoController = createMemoWindow({
       title:
@@ -3052,18 +3053,18 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       onContentChange:
         typeof options.onContentChange === 'function'
           ? (value) => {
-              options.onContentChange(value);
-            }
+            options.onContentChange(value);
+          }
           : undefined,
       onTitleChange:
         typeof options.onTitleChange === 'function'
           ? (value) => {
-              options.onTitleChange(value);
-              syncControlLabels();
-            }
+            options.onTitleChange(value);
+            syncControlLabels();
+          }
           : () => {
-              syncControlLabels();
-            },
+            syncControlLabels();
+          },
     });
 
     const windowElement = memoController?.element;
@@ -3100,7 +3101,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       { position: 'bottom-right', horizontal: 'right', vertical: 'bottom', cursor: 'nwse-resize' },
     ];
 
-    let handleLayoutCommit = () => {};
+    let handleLayoutCommit = () => { };
 
     const chrome = createWindowChrome({
       windowElement,
