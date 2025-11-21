@@ -1194,7 +1194,7 @@ body {
   gap: 0;
 }
 
-.workspace__window--compact-header .workspace__window-controls button:not(.workspace__window-maximize) {
+.workspace__window--compact-header .workspace__window-controls button:not(.workspace__window-maximize):not(.workspace__window-close):not(.workspace__window-duplicate) {
   display: none;
 }
 
