@@ -17,7 +17,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm preview -- --host 0.0.0.0 --port 4173',
+    command: 'npm run preview -- --host 0.0.0.0 --port 4173',
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
