@@ -2002,6 +2002,14 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         });
       }
 
+      // Update header navigation buttons
+      if (headerPrevButton) {
+        headerPrevButton.disabled = currentPage <= 1;
+      }
+      if (headerNextButton && Number.isFinite(totalPages)) {
+        headerNextButton.disabled = currentPage >= totalPages;
+      }
+
       windowElement.dataset.pageHistoryIndex = String(pageHistoryIndex);
       windowElement.dataset.pageHistoryLength = String(pageHistory.length);
       syncBookmarksState();
@@ -2777,7 +2785,53 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       disposeWindow();
     });
 
+    // Page navigation controls for header
+    const headerPrevButton = document.createElement('button');
+    headerPrevButton.type = 'button';
+    headerPrevButton.className = 'workspace__window-header-nav workspace__window-header-nav--prev';
+    headerPrevButton.textContent = '◀';
+    headerPrevButton.setAttribute('aria-label', 'Previous page');
+    headerPrevButton.addEventListener('click', () => {
+      stepPage(-1);
+    });
+
+    const headerNextButton = document.createElement('button');
+    headerNextButton.type = 'button';
+    headerNextButton.className = 'workspace__window-header-nav workspace__window-header-nav--next';
+    headerNextButton.textContent = '▶';
+    headerNextButton.setAttribute('aria-label', 'Next page');
+    headerNextButton.addEventListener('click', () => {
+      stepPage(1);
+    });
+
+    // Tool toggle buttons
+    const searchToggleButton = document.createElement('button');
+    searchToggleButton.type = 'button';
+    searchToggleButton.className = 'workspace__window-tool-toggle workspace__window-tool-toggle--search';
+    searchToggleButton.textContent = '🔍';
+    searchToggleButton.setAttribute('aria-label', 'Toggle search');
+    searchToggleButton.setAttribute('aria-pressed', 'false');
+
+    const outlineToggleButton = document.createElement('button');
+    outlineToggleButton.type = 'button';
+    outlineToggleButton.className = 'workspace__window-tool-toggle workspace__window-tool-toggle--outline';
+    outlineToggleButton.textContent = '📑';
+    outlineToggleButton.setAttribute('aria-label', 'Toggle outline');
+    outlineToggleButton.setAttribute('aria-pressed', 'false');
+
+    const toolsToggleButton = document.createElement('button');
+    toolsToggleButton.type = 'button';
+    toolsToggleButton.className = 'workspace__window-tool-toggle workspace__window-tool-toggle--tools';
+    toolsToggleButton.textContent = '⚙';
+    toolsToggleButton.setAttribute('aria-label', 'Toggle tools');
+    toolsToggleButton.setAttribute('aria-pressed', 'false');
+
     controls.append(
+      headerPrevButton,
+      headerNextButton,
+      searchToggleButton,
+      outlineToggleButton,
+      toolsToggleButton,
       renameButton,
       colorButton,
       pinButton,
@@ -2843,11 +2897,63 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     outlineSection.append(outlineHeader, outlineStatus, outlineList);
     syncOutlineMetadata();
 
+    // Toggle functionality for toolbar, search, and outline
+    let toolbarVisible = false;
+    let searchVisible = false;
+    let outlineVisible = false;
+
+    const toggleToolbar = () => {
+      toolbarVisible = !toolbarVisible;
+      toolbar.hidden = !toolbarVisible;
+      toolsToggleButton.setAttribute('aria-pressed', String(toolbarVisible));
+      windowElement.dataset.toolbarVisible = String(toolbarVisible);
+    };
+
+    const toggleSearch = () => {
+      searchVisible = !searchVisible;
+      searchSection.hidden = !searchVisible;
+      searchToggleButton.setAttribute('aria-pressed', String(searchVisible));
+      windowElement.dataset.searchVisible = String(searchVisible);
+      if (searchVisible && searchController?.focusInput) {
+        queueMicrotask(() => {
+          searchController.focusInput();
+        });
+      }
+    };
+
+    const toggleOutline = () => {
+      outlineVisible = !outlineVisible;
+      outlineSection.hidden = !outlineVisible;
+      outlineToggleButton.setAttribute('aria-pressed', String(outlineVisible));
+      windowElement.dataset.outlineVisible = String(outlineVisible);
+    };
+
+    toolsToggleButton.addEventListener('click', () => {
+      bringToFront();
+      toggleToolbar();
+    });
+
+    searchToggleButton.addEventListener('click', () => {
+      bringToFront();
+      toggleSearch();
+    });
+
+    outlineToggleButton.addEventListener('click', () => {
+      bringToFront();
+      toggleOutline();
+    });
+
     body.append(toolbar, searchSection, outlineSection, viewer.element);
+
+    // Set sections as hidden by default - MUST be after append
+    toolbar.hidden = true;
+    searchSection.hidden = true;
+    outlineSection.hidden = true;
 
     syncNotesMetadata();
     clampBookmarksToBounds();
     syncBookmarksState();
+
     syncNavigationState();
     syncZoomState();
     updateViewerState();
