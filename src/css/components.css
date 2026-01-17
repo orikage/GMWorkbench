@@ -1,0 +1,310 @@
+/* UI Components */
+
+/* Buttons & Controls */
+button {
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+    outline: none;
+}
+
+.workspace__control,
+.workspace__menu-button,
+.workspace__utility-button {
+    background: transparent;
+    color: var(--c-text-secondary);
+    border-radius: var(--radius-sm);
+    transition: all var(--trans-fast);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.workspace__control:hover,
+.workspace__menu-button:hover,
+.workspace__utility-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--c-text-primary);
+}
+
+.workspace__control:active,
+.workspace__menu-button:active,
+.workspace__utility-button:active {
+    transform: scale(0.96);
+}
+
+/* Primary / Accent Buttons */
+.workspace__control--accent {
+    background: var(--c-accent);
+    color: white;
+    box-shadow: 0 4px 10px rgba(233, 30, 99, 0.3);
+}
+
+.workspace__control--accent:hover {
+    background: var(--c-accent-hover);
+    box-shadow: 0 6px 14px rgba(233, 30, 99, 0.5);
+}
+
+/* Windows - The Core Element */
+.workspace__window {
+    position: absolute;
+    background: var(--c-bg-surface-glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: box-shadow var(--trans-normal), border-color var(--trans-normal);
+    animation: window-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes window-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.workspace__window--active {
+    border-color: var(--c-accent);
+    box-shadow: var(--shadow-glow), var(--shadow-strong);
+    z-index: var(--z-window-active);
+}
+
+.workspace__window-header {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--c-border);
+    cursor: grab;
+}
+
+.workspace__window-header:active {
+    cursor: grabbing;
+}
+
+.workspace__window-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--c-text-primary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.workspace__window-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.workspace__window-body {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: auto;
+}
+
+/* Sidebar Panels */
+.workspace__menu-panel {
+    background: var(--c-bg-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-left: 16px;
+    /* Offset from sidebar */
+    width: 300px;
+    box-shadow: var(--shadow-soft);
+    animation: slide-in-left 0.2s ease-out;
+}
+
+@keyframes slide-in-left {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Inputs */
+input[type="text"],
+textarea {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-sm);
+    color: var(--c-text-primary);
+    padding: 8px 12px;
+    width: 100%;
+    transition: all var(--trans-fast);
+}
+
+input[type="text"]:focus,
+textarea:focus {
+    border-color: var(--c-accent);
+    background: rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 0 2px var(--c-accent-glow);
+}
+
+/* --- Window Resizing --- */
+.workspace__window-resize {
+    position: absolute;
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity var(--trans-fast);
+}
+
+.workspace__window:hover .workspace__window-resize,
+.workspace__window--resizing .workspace__window-resize {
+    opacity: 1;
+}
+
+.workspace__window-resize::after {
+    content: '';
+    position: absolute;
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--c-accent);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--c-accent-glow);
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.workspace__window-resize:hover::after {
+    transform: scale(1.5);
+}
+
+.workspace__window-resize--top-left {
+    top: -4px;
+    left: -4px;
+    cursor: nwse-resize;
+}
+
+.workspace__window-resize--top-right {
+    top: -4px;
+    right: -4px;
+    cursor: nesw-resize;
+}
+
+.workspace__window-resize--bottom-left {
+    bottom: -4px;
+    left: -4px;
+    cursor: nesw-resize;
+}
+
+.workspace__window-resize--bottom-right {
+    bottom: -4px;
+    right: -4px;
+    cursor: nwse-resize;
+}
+
+.workspace__window-resize--top-left::after {
+    top: 6px;
+    left: 6px;
+}
+
+.workspace__window-resize--top-right::after {
+    top: 6px;
+    right: 6px;
+}
+
+.workspace__window-resize--bottom-left::after {
+    bottom: 6px;
+    left: 6px;
+}
+
+.workspace__window-resize--bottom-right::after {
+    bottom: 6px;
+    right: 6px;
+}
+
+/* --- Window Toolbar --- */
+.workspace__window-toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--c-bg-panel);
+    border-bottom: 1px solid var(--c-border);
+    flex-wrap: wrap;
+}
+
+.workspace__window-toolbar-cluster {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Page Slider */
+.workspace__window-page-slider {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    outline: none;
+}
+
+.workspace__window-page-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--c-accent);
+    cursor: pointer;
+    box-shadow: 0 0 8px var(--c-accent-glow);
+    transition: transform var(--trans-fast);
+}
+
+.workspace__window-page-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* --- PDF Viewer --- */
+.workspace__window-viewer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--c-bg-body);
+    /* Dark background for PDF area */
+    min-width: 100%;
+    min-height: 100%;
+}
+
+.workspace__window-canvas {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    max-width: none;
+    max-height: none;
+}
+
+/* --- Utility Classes per component structure --- */
+.workspace__window-status {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    pointer-events: none;
+}

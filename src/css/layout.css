@@ -1,0 +1,152 @@
+/* Layout & Grid */
+
+.workspace {
+    display: flex;
+    width: 100%;
+    height: 100vh;
+    position: relative;
+    background: var(--c-bg-body);
+    /* Isometric dot grid pattern */
+    background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+
+/* Sidebar - Floating Glass Bar */
+.workspace__sidebar {
+    position: absolute;
+    left: 16px;
+    top: 72px;
+    /* Below header */
+    bottom: 16px;
+    width: 64px;
+    background: var(--c-bg-surface-glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    z-index: var(--z-ui-overlay);
+    transition: width var(--trans-normal), background-color var(--trans-normal);
+    box-shadow: var(--shadow-soft);
+}
+
+.workspace__sidebar:hover {
+    width: 64px;
+    /* Disable expand on hover for now if user wants just buttons, or keep it?
+                  User said "like workspace_control buttons".
+                  I'll keep the width fixed to 64px (icon only) to be minimal,
+                  and maybe show tooltips instead of expanding.
+                  Expanding sidebar can be annoying if it covers content.
+                  Let's try "Auto-width" or just keep it compact.
+                  Actually, let's keep it compact (64px) and removed the expansion for now
+                  to fully satisfy "like buttons". */
+    background: rgba(30, 30, 30, 0.95);
+    border-color: var(--c-border-strong);
+}
+
+/* Ensure menu buttons inside sidebar look good and have tooltips */
+.workspace__sidebar .workspace__menu-button {
+    margin-bottom: 8px;
+    position: relative;
+}
+
+/* Tooltip implementation */
+.workspace__sidebar .workspace__menu-button::after {
+    content: attr(aria-label);
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%) translateX(8px);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.workspace__sidebar .workspace__menu-button:hover::after {
+    opacity: 1;
+}
+
+/* Stage - Infinite Canvas Area */
+.workspace__container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    /* Create new stacking context */
+}
+
+.workspace__stage {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+/* App Bar - Top Floating Header */
+.workspace__app-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: var(--z-ui-overlay);
+    pointer-events: none;
+    /* Let clicks pass through to canvas */
+}
+
+.workspace__app-bar>* {
+    pointer-events: auto;
+    /* Re-enable pointer events for buttons */
+}
+
+/* Canvas & Windows Area */
+.workspace__layout {
+    width: 100%;
+    height: 100%;
+}
+
+.workspace__canvas {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.workspace__canvas-title {
+    display: none;
+    /* Hide title visually but keep for structure/reader if needed */
+}
+
+.workspace__canvas-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--c-text-tertiary);
+    font-size: 1.2rem;
+    pointer-events: none;
+    text-align: center;
+}
+
+.workspace__windows {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    height: 100%;
+}

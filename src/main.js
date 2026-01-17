@@ -1,5 +1,5 @@
-import './style.css';
-import { createWorkspace } from './workspace.js';
+import './css/main.css';
+import { createWorkspace } from './components/workspace-entry.js';
 
 function bootstrap() {
   const root = document.querySelector('#app');

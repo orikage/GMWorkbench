@@ -1,0 +1,248 @@
+/* Modules CSS - Specific Functional Components */
+
+/* --- App Bar (Header) --- */
+.workspace__app-bar-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+}
+
+.workspace__app-bar-left,
+.workspace__app-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.workspace__app-bar-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    /* Text shouldn't block clicks */
+}
+
+.workspace__status-label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--c-text-secondary);
+}
+
+.workspace__status-hint {
+    font-size: 0.7rem;
+    color: var(--c-text-tertiary);
+}
+
+/* Scenario Button (Dropdown-like) */
+.workspace__scenario-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    color: var(--c-text-primary);
+}
+
+.workspace__scenario-label {
+    font-size: 0.7rem;
+    color: var(--c-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.workspace__scenario-name {
+    font-weight: 600;
+}
+
+.workspace__scenario-caret {
+    font-size: 0.8rem;
+    color: var(--c-text-tertiary);
+}
+
+/* --- Navigation Menu (Sidebar) --- */
+.workspace__menu {
+    width: 100%;
+}
+
+.workspace__menu-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+}
+
+.workspace__menu-item {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.workspace__menu-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--c-text-secondary);
+    transition: all var(--trans-fast);
+}
+
+.workspace__menu-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--c-text-primary);
+}
+
+.workspace__menu-button--active {
+    background: var(--c-accent);
+    color: white;
+    box-shadow: 0 0 12px var(--c-accent-glow);
+}
+
+.workspace__menu-icon {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+}
+
+/* Side Surface (Holds Menu + Panels) */
+.workspace__menu-surface {
+    display: flex;
+    height: 100%;
+}
+
+.workspace__menu-panels {
+    position: absolute;
+    left: 72px;
+    /* Offset from 64px sidebar + gap */
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* Center panels vertically relative to sidebar */
+}
+
+/* Panels are styled in components.css (.workspace__menu-panel) but ensure they catch events */
+.workspace__menu-panel {
+    pointer-events: auto;
+    max-height: 100%;
+    overflow-y: auto;
+    background: var(--c-bg-surface);
+    /* Ensure opaque background */
+    border: 1px solid var(--c-border);
+    box-shadow: var(--shadow-strong);
+}
+
+/* --- Onboarding Overlay --- */
+.workspace__stage-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: var(--z-modal);
+}
+
+.workspace__stage-overlay[hidden] {
+    display: none !important;
+}
+
+.workspace__onboarding {
+    background: var(--c-bg-surface);
+    border: 1px solid var(--c-border-strong);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    max-width: 600px;
+    box-shadow: var(--shadow-strong);
+    animation: window-pop 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.workspace__onboarding-title {
+    margin-top: 0;
+    font-size: 1.5rem;
+    color: var(--c-text-primary);
+    margin-bottom: 16px;
+}
+
+.workspace__onboarding-description {
+    color: var(--c-text-secondary);
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+
+.workspace__onboarding-steps {
+    padding-left: 20px;
+    margin-bottom: 32px;
+    color: var(--c-text-secondary);
+}
+
+.workspace__onboarding-step {
+    margin-bottom: 16px;
+}
+
+.workspace__onboarding-step-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--c-text-primary);
+    margin: 0 0 4px 0;
+}
+
+.workspace__onboarding-step-body {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.workspace__onboarding-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.workspace__onboarding-button {
+    background: var(--c-accent);
+    color: white;
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    text-align: center;
+    transition: all var(--trans-fast);
+}
+
+.workspace__onboarding-button:hover {
+    background: var(--c-accent-hover);
+    box-shadow: 0 4px 12px var(--c-accent-glow);
+}
+
+.workspace__onboarding-dismiss {
+    background: transparent;
+    color: var(--c-text-tertiary);
+    font-size: 0.9rem;
+    padding: 8px;
+}
+
+.workspace__onboarding-dismiss:hover {
+    color: var(--c-text-secondary);
+    text-decoration: underline;
+}
+
+.workspace__stage-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--c-text-tertiary);
+    pointer-events: none;
+}

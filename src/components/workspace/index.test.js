@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { createWorkspace } from './workspace.js';
+import { createWorkspace } from './index.js';
 
 const pdfMocks = vi.hoisted(() => {
   const state = {
@@ -82,7 +82,7 @@ vi.mock(
   { virtual: true },
 );
 
-vi.mock('./workspace-storage.js', () => ({
+vi.mock('../../core/storage.js', () => ({
   loadWorkspaceWindows: storageMocks.load,
   persistWorkspaceWindow: storageMocks.persist,
   removeWorkspaceWindow: storageMocks.remove,

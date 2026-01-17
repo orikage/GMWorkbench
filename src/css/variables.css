@@ -1,0 +1,43 @@
+:root {
+  /* Color Palette - Ccfolia Inspired (Dark Material/Glass) */
+  --c-text-primary: #e0e0e0;
+  --c-text-secondary: #a0a0a0;
+  --c-text-tertiary: #666666;
+
+  /* Backgrounds */
+  --c-bg-body: #121212; /* Deep dark background */
+  --c-bg-surface: #1e1e1e; /* Card surface */
+  --c-bg-surface-glass: rgba(30, 30, 30, 0.85); /* Glass effect */
+  --c-bg-panel: #2c2c2c; /* Inner panels */
+  
+  /* Accents */
+  --c-accent: #e91e63; /* Pink/Red */
+  --c-accent-hover: #c2185b;
+  --c-accent-glow: rgba(233, 30, 99, 0.4);
+  
+  /* Borders */
+  --c-border: rgba(255, 255, 255, 0.1);
+  --c-border-strong: rgba(255, 255, 255, 0.15);
+  
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  
+  /* Shadows */
+  --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-strong: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 15px var(--c-accent-glow);
+
+  /* Transitions */
+  --trans-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --trans-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Z-Index Layers */
+  --z-background: 0;
+  --z-stage: 10;
+  --z-window: 100;
+  --z-window-active: 110;
+  --z-ui-overlay: 200;
+  --z-modal: 1000;
+}

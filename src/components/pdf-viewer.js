@@ -166,7 +166,7 @@ function prepareCanvas(canvas, viewport) {
   return renderContext;
 }
 
-export function createPdfViewer(file) {
+export function createPdfViewer(file, { onZoom } = {}) {
   const container = document.createElement('div');
   container.className = 'workspace__window-viewer';
 
@@ -176,6 +176,66 @@ export function createPdfViewer(file) {
   const status = createStatusElement();
 
   container.append(canvas, status);
+
+  const pointers = new Map();
+  let prevDiff = -1;
+
+  container.addEventListener('pointerdown', (event) => {
+    pointers.set(event.pointerId, event);
+  });
+
+  container.addEventListener('pointermove', (event) => {
+    pointers.set(event.pointerId, event);
+
+    if (pointers.size === 2) {
+      const [p1, p2] = Array.from(pointers.values());
+      const dx = p1.clientX - p2.clientX;
+      const dy = p1.clientY - p2.clientY;
+      const curDiff = Math.hypot(dx, dy);
+
+      if (prevDiff > 0) {
+        if (lastViewportMetrics && typeof onZoom === 'function') {
+          const scale = curDiff / prevDiff;
+          const newZoom = lastViewportMetrics.zoom * scale;
+          onZoom(newZoom);
+        }
+      }
+
+      prevDiff = curDiff;
+    }
+  });
+
+  const pointerUpHandler = (event) => {
+    pointers.delete(event.pointerId);
+    if (pointers.size < 2) {
+      prevDiff = -1;
+    }
+  };
+
+  container.addEventListener('pointerup', pointerUpHandler);
+  container.addEventListener('pointercancel', pointerUpHandler);
+  container.addEventListener('pointerout', pointerUpHandler);
+  container.addEventListener('leave', pointerUpHandler);
+
+  container.addEventListener(
+    'wheel',
+    (event) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+
+        if (lastViewportMetrics && typeof onZoom === 'function') {
+          // Normalize wheel delta for zoom
+          // deltaY is negative when zooming in (scrolling up)
+          const delta = -event.deltaY;
+          // Apply a gentle scaling factor
+          const factor = 1 + delta * 0.002;
+          const newZoom = lastViewportMetrics.zoom * factor;
+          onZoom(newZoom);
+        }
+      }
+    },
+    { passive: false },
+  );
 
   let pdfDocument = null;
   let renderTask = null;
@@ -319,8 +379,8 @@ export function createPdfViewer(file) {
       const content = await page.getTextContent();
       const text = Array.isArray(content.items)
         ? content.items
-            .map((item) => (typeof item.str === 'string' ? item.str : ''))
-            .join(' ')
+          .map((item) => (typeof item.str === 'string' ? item.str : ''))
+          .join(' ')
         : '';
       const normalized = text.replace(/\s+/g, ' ').trim();
       pageTextCache.set(sanitizedPage, normalized);
