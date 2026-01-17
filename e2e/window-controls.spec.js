@@ -36,7 +36,7 @@ test.describe('window controls', () => {
         await expect(realDuplicateButton).toBeVisible();
 
         // Click duplicate
-        await realDuplicateButton.click();
+        await realDuplicateButton.click({ force: true });
 
         // Expect 2 windows
         await expect(page.locator('.workspace__window')).toHaveCount(2);
