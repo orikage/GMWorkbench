@@ -7,6 +7,8 @@ test.describe('window controls', () => {
         test.setTimeout(60000);
         await page.goto('/');
 
+        page.on('console', msg => console.log(`BROWSER COSOLE: ${msg.text()}`));
+
         // Open sample PDF
         const sampleButton = page.getByRole('button', { name: SAMPLE_BUTTON });
         await sampleButton.click();

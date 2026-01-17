@@ -2739,61 +2739,70 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
     });
 
     duplicateButton.addEventListener('click', () => {
-      const layout = chrome.getLayoutState();
-      const duplicateElement = openWindow(file, {
-        page: currentPage,
-        zoom: currentZoom,
-        rotation: currentRotation,
-        totalPages,
-        pinned: isPinned(),
-        notes: windowNotes,
-        title: windowTitle,
-        pageHistory: pageHistory.slice(),
-        pageHistoryIndex,
-        color: windowColor,
-        bookmarks: bookmarks.slice(),
-        maximized: chrome.isMaximized(),
-        left: layout.left + 24,
-        top: layout.top + 24,
-        width: layout.width,
-        height: layout.height,
-        restoreLeft: layout.restoreLeft,
-        restoreTop: layout.restoreTop,
-        restoreWidth: layout.restoreWidth,
-        restoreHeight: layout.restoreHeight,
-      });
+      console.log('DEBUG: duplicate button clicked');
+      try {
+        const layout = chrome.getLayoutState();
+        console.log('DEBUG: layout state', JSON.stringify(layout));
 
-      if (!duplicateElement) {
-        return;
-      }
-
-      const duplicateEvent = new CustomEvent(WINDOW_DUPLICATE_EVENT, {
-        bubbles: true,
-        detail: {
-          file,
+        const duplicateElement = openWindow(file, {
           page: currentPage,
           zoom: currentZoom,
           rotation: currentRotation,
           totalPages,
-          sourceId: windowId,
-          duplicateId: duplicateElement.dataset?.windowId,
+          pinned: isPinned(),
           notes: windowNotes,
           title: windowTitle,
+          pageHistory: pageHistory.slice(),
+          pageHistoryIndex,
           color: windowColor,
+          bookmarks: bookmarks.slice(),
           maximized: chrome.isMaximized(),
-          left: layout.left,
-          top: layout.top,
+          left: layout.left + 24,
+          top: layout.top + 24,
           width: layout.width,
           height: layout.height,
           restoreLeft: layout.restoreLeft,
           restoreTop: layout.restoreTop,
           restoreWidth: layout.restoreWidth,
           restoreHeight: layout.restoreHeight,
-          bookmarks: bookmarks.slice(),
-        },
-      });
+        });
 
-      windowElement.dispatchEvent(duplicateEvent);
+        if (!duplicateElement) {
+          console.error('DEBUG: openWindow returned null');
+          return;
+        }
+        console.log('DEBUG: duplicateElement success', duplicateElement.dataset.windowId);
+
+        const duplicateEvent = new CustomEvent(WINDOW_DUPLICATE_EVENT, {
+          bubbles: true,
+          detail: {
+            file,
+            page: currentPage,
+            zoom: currentZoom,
+            rotation: currentRotation,
+            totalPages,
+            sourceId: windowId,
+            duplicateId: duplicateElement.dataset?.windowId,
+            notes: windowNotes,
+            title: windowTitle,
+            color: windowColor,
+            maximized: chrome.isMaximized(),
+            left: layout.left,
+            top: layout.top,
+            width: layout.width,
+            height: layout.height,
+            restoreLeft: layout.restoreLeft,
+            restoreTop: layout.restoreTop,
+            restoreWidth: layout.restoreWidth,
+            restoreHeight: layout.restoreHeight,
+            bookmarks: bookmarks.slice(),
+          },
+        });
+
+        windowElement.dispatchEvent(duplicateEvent);
+      } catch (err) {
+        console.error('DEBUG: Duplicate CRASH', err);
+      }
     });
 
     const closeButton = document.createElement('button');
