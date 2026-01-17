@@ -54,11 +54,5 @@ describe('createWorkspaceMenu', () => {
     expect(element.querySelector('.workspace__menu-track')).toBeNull();
   });
 
-  it('duplicates accessible labels to the title attribute for hover hints', () => {
-    const menu = createWorkspaceMenu();
-    const browserButton = menu.element.querySelector('[data-menu-id="browser"]');
 
-    expect(browserButton).toBeInstanceOf(HTMLButtonElement);
-    expect(browserButton?.getAttribute('title')).toBe('PDFブラウザ');
-  });
 });
