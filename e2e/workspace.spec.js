@@ -64,21 +64,22 @@ test.describe('workspace design theme', () => {
       };
     });
 
-    expect(tokens.body).toBe('#090d14');
-    expect(tokens.surface).toBe('#101622');
-    expect(tokens.accent).toBe('#2f74ff');
+    expect(tokens.body).toBe('#121212'); // Updated to new dark theme
+    expect(tokens.surface).toBe('#1e1e1e');
+    expect(tokens.accent).toBe('#e91e63');
   });
 
   test('exposes consistent accent colors for interactive controls', async ({ page }) => {
     await page.goto('/');
 
     const accent = await page.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue('--workspace-accent').trim(),
+      getComputedStyle(document.documentElement).getPropertyValue('--c-accent').trim(),
     );
     const activeMenu = page.locator('.workspace__menu-button').first();
 
-    expect(accent).toBe('#2f74ff');
+    expect(accent).toBe('#e91e63');
     await expect(activeMenu).toHaveClass(/workspace__menu-button--active/);
-    await expect(activeMenu).toHaveCSS('border-color', 'rgb(47, 116, 255)');
+    // Active menu uses background color now, not border color
+    await expect(activeMenu).toHaveCSS('background-color', 'rgb(233, 30, 99)');
   });
 });

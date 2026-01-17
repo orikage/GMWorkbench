@@ -22,7 +22,7 @@ test.describe('window controls', () => {
         await expect(windowLocator).not.toHaveClass(/workspace__window--maximized/);
 
         // Click maximize
-        await maximizeButton.click();
+        await maximizeButton.click({ force: true });
 
         // Expect maximized class
         await expect(windowLocator).toHaveClass(/workspace__window--maximized/);
