@@ -1,4 +1,4 @@
-import { createSamplePdfFile } from '../sample-pdf.js';
+import { createSamplePdfFile } from '../../core/sample-data.js';
 import {
   clearWorkspaceWindows,
   exportWorkspaceSnapshot,
@@ -6,7 +6,7 @@ import {
   loadWorkspacePreferences,
   loadWorkspaceWindows,
   persistWorkspacePreference,
-} from '../workspace-storage.js';
+} from '../../core/storage.js';
 import { createWindowCanvas } from './canvas.js';
 import { createHeader, createHint } from './chrome.js';
 import { createDropZone } from './drop-zone.js';
@@ -652,12 +652,12 @@ export function createWorkspace() {
   logNote.textContent = '保存データの書き出し・読み込みとキャッシュ管理を行えます。';
   registerPanel('log', [logNote, maintenance.element]);
 
-  // Main Container (Flex Row)
+  // Main Container
   const container = document.createElement('div');
   container.className = 'workspace__container';
-  container.append(stage, sidebar);
+  container.append(stage);
 
-  workspace.append(header, container);
+  workspace.append(header, container, sidebar);
 
   if (layersOverlay?.element instanceof HTMLElement) {
     stage.append(layersOverlay.element);
@@ -681,6 +681,37 @@ export function createWorkspace() {
         }
       });
     }
+  });
+
+  // Close menu panels when clicking outside
+  workspace.addEventListener('click', (event) => {
+    const activeId = menu.getActiveId?.();
+    if (!activeId) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    // Do not close if clicking inside the panel itself
+    if (target.closest('.workspace__menu-panel')) {
+      return;
+    }
+
+    // Do not close if clicking the menu bar (handled by toggle logic)
+    if (target.closest('.workspace__menu')) {
+      return;
+    }
+
+    // Do not close if clicking utility buttons (handled by their listeners)
+    if (target.closest('.workspace__utility-button')) {
+      return;
+    }
+
+    // Close the menu
+    menu.setActive(null);
   });
 
   syncPanelVisibility();

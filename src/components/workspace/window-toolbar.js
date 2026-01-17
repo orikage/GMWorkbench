@@ -179,7 +179,7 @@ export function createWindowToolbar({
   const rotateResetButton = document.createElement('button');
   rotateResetButton.type = 'button';
   rotateResetButton.className = 'workspace__window-rotation-reset';
-  rotateResetButton.textContent = '0°';
+  rotateResetButton.textContent = 'リセット';
   rotateResetButton.addEventListener('click', () => {
     resetRotation();
   });
@@ -226,7 +226,7 @@ export function createWindowToolbar({
   const zoomFitWidthButton = document.createElement('button');
   zoomFitWidthButton.type = 'button';
   zoomFitWidthButton.className = 'workspace__window-zoom-fit workspace__window-zoom-fit--width';
-  zoomFitWidthButton.textContent = '⟷';
+  zoomFitWidthButton.textContent = '幅合わせ';
   zoomFitWidthButton.setAttribute('aria-pressed', 'false');
   zoomFitWidthButton.addEventListener('click', () => {
     const target = computeFitZoom('width');
@@ -239,7 +239,7 @@ export function createWindowToolbar({
   const zoomFitPageButton = document.createElement('button');
   zoomFitPageButton.type = 'button';
   zoomFitPageButton.className = 'workspace__window-zoom-fit workspace__window-zoom-fit--page';
-  zoomFitPageButton.textContent = '⤢';
+  zoomFitPageButton.textContent = '全体表示';
   zoomFitPageButton.setAttribute('aria-pressed', 'false');
   zoomFitPageButton.addEventListener('click', () => {
     const target = computeFitZoom('page');

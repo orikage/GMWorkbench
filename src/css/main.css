@@ -1,0 +1,11 @@
+@import './variables.css';
+@import './base.css';
+@import './layout.css';
+@import './components.css';
+@import './toolbar.css';
+@import './modules.css';
+
+/* Temporary: Paste original style.css content here but modified to use variables? 
+   Actually, rewriting the whole thing is safer to ensure consistency with the new design system.
+   For now, I'll start with imports and we will build components.css incrementally.
+*/

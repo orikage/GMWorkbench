@@ -1,0 +1,136 @@
+/* Toolbar Specific Styles - Reconstructed */
+
+.workspace__window-toolbar-cluster {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.workspace__window-toolbar-segment {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+    border: 1px solid var(--c-border);
+}
+
+/* Nav Buttons (First, Prev, Next, Last, History) */
+.workspace__window-nav {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--c-text-primary);
+    background: transparent;
+    border-radius: var(--radius-sm);
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.workspace__window-nav:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--c-accent);
+}
+
+.workspace__window-nav:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* Page Input & Form */
+.workspace__window-page {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+}
+
+.workspace__window-page-label {
+    font-size: 0.75rem;
+    color: var(--c-text-secondary);
+    display: none;
+    /* Hide label visually for compactness, rely on aria */
+}
+
+.workspace__window-page-input {
+    width: 48px;
+    height: 24px;
+    padding: 0 4px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-sm);
+    color: var(--c-text-primary);
+    font-size: 0.9rem;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.workspace__window-page-input::-webkit-outer-spin-button,
+.workspace__window-page-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.workspace__window-page-input:focus {
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 1px var(--c-accent-glow);
+}
+
+/* Zoom & Rotation Controls */
+.workspace__window-zoom-control,
+.workspace__window-rotation-control,
+.workspace__window-zoom-reset,
+.workspace__window-zoom-fit,
+.workspace__window-rotation-reset {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 0.8rem;
+    color: var(--c-text-secondary);
+    background: transparent;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.workspace__window-zoom-control {
+    width: 24px;
+    padding: 0;
+    font-size: 1rem;
+}
+
+.workspace__window-zoom-control:hover,
+.workspace__window-rotation-control:hover,
+.workspace__window-zoom-reset:hover,
+.workspace__window-zoom-fit:hover,
+.workspace__window-rotation-reset:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--c-text-primary);
+}
+
+.workspace__window-zoom-display,
+.workspace__window-rotation-display {
+    font-size: 0.75rem;
+    color: var(--c-text-secondary);
+    min-width: 36px;
+    text-align: center;
+    font-feature-settings: "tnum";
+}
+
+.workspace__window-zoom-fit[aria-pressed="true"] {
+    background: var(--c-accent);
+    color: white;
+}
+
+/* Groups */
+.workspace__window-rotation,
+.workspace__window-zoom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}

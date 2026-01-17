@@ -1,0 +1,49 @@
+@import './variables.css';
+
+/* Base Reset & Typography */
+html {
+    font-family: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+    box-sizing: border-box;
+    background-color: var(--c-bg-body);
+    color: var(--c-text-primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: inherit;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    overflow: hidden;
+    /* App-like feel */
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+#app {
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+}

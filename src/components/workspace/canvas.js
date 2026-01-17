@@ -2,7 +2,7 @@ import { createPdfViewer } from '../pdf-viewer.js';
 import {
   persistWorkspaceWindow,
   removeWorkspaceWindow,
-} from '../workspace-storage.js';
+} from '../../core/storage.js';
 import {
   CANVAS_FALLBACK_HEIGHT,
   CANVAS_FALLBACK_WIDTH,
@@ -120,7 +120,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
       maxLeft,
     );
     const safeTop = Math.min(
-      Math.max(0, Number.isFinite(top) ? Math.round(top) : 0),
+      Math.max(72, Number.isFinite(top) ? Math.round(top) : 72),
       maxTop,
     );
 
@@ -460,7 +460,12 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
           };
 
           const areaSize = getAreaSize();
-          setWindowBounds({ left: 0, top: 0, width: areaSize.width, height: areaSize.height });
+          setWindowBounds({
+            left: 0,
+            top: 72,
+            width: areaSize.width,
+            height: areaSize.height - 72,
+          });
         } else {
           const restoreBounds = {
             left: Number.isFinite(layoutState.restoreLeft) ? layoutState.restoreLeft : layoutState.left,
@@ -634,12 +639,21 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         bringToFront({ persistFocus: false });
       };
 
+      const handleHeaderDoubleClick = (event) => {
+        if (shouldIgnorePointerInteraction(event)) {
+          return;
+        }
+        event.preventDefault();
+        toggleMaximize();
+      };
+
       header.addEventListener('pointerdown', handleHeaderPointerDown);
       header.addEventListener('pointermove', handleHeaderPointerMove);
       header.addEventListener('pointerup', handleHeaderPointerUp);
       header.addEventListener('pointercancel', handleHeaderPointerCancel);
       header.addEventListener('lostpointercapture', handleHeaderPointerCancel);
       header.addEventListener('mousedown', handleHeaderMouseDown);
+      header.addEventListener('dblclick', handleHeaderDoubleClick);
 
       return () => {
         header.removeEventListener('pointerdown', handleHeaderPointerDown);
@@ -648,6 +662,7 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
         header.removeEventListener('pointercancel', handleHeaderPointerCancel);
         header.removeEventListener('lostpointercapture', handleHeaderPointerCancel);
         header.removeEventListener('mousedown', handleHeaderMouseDown);
+        header.removeEventListener('dblclick', handleHeaderDoubleClick);
       };
     };
 
@@ -1058,7 +1073,11 @@ export function createWindowCanvas({ onWindowCountChange } = {}) {
 
     let currentRotation = normalizeRotation(options.rotation);
 
-    const viewer = createPdfViewer(file);
+    const viewer = createPdfViewer(file, {
+      onZoom: (newZoom) => {
+        commitZoomChange(newZoom);
+      },
+    });
     let disposed = false;
 
     const emitMaximizeChange = () => {

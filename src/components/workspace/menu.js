@@ -42,7 +42,8 @@ function createMenuButton(item, onActivate) {
   button.dataset.menuId = item.id;
   button.setAttribute('aria-pressed', 'false');
   button.setAttribute('aria-label', item.label);
-  copyAccessibleLabelToTitle(button, item.label);
+  // Disabled native title to use CSS-based tooltip for faster interaction
+  // copyAccessibleLabelToTitle(button, item.label);
 
   const icon = createWorkspaceIcon(item.icon, { className: 'workspace__menu-icon' });
   const label = document.createElement('span');
@@ -93,12 +94,29 @@ export function createWorkspaceMenu({
   };
 
   const setActive = (id, { silent = false } = {}) => {
+    if (id === null) {
+      if (activeId !== null) {
+        activeId = null;
+        updateButtonState(null);
+        if (!silent) {
+          notifyMenuChange(null);
+        }
+      }
+      return;
+    }
+
     if (!buttons.has(id)) {
       return;
     }
 
     if (activeId === id) {
-      updateButtonState(id);
+      // Toggle off behavior
+      activeId = null;
+      updateButtonState(id); // will turn off because activeId is now null
+
+      if (!silent) {
+        notifyMenuChange(null);
+      }
       return;
     }
 

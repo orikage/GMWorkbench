@@ -8,7 +8,7 @@ import {
   persistWorkspacePreference,
   persistWorkspaceWindow,
   loadWorkspaceWindows,
-} from './workspace-storage.js';
+} from './storage.js';
 
 const originalIndexedDB = globalThis.indexedDB;
 
