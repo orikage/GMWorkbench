@@ -29,6 +29,7 @@ test.describe('window controls', () => {
 
         // Click restore
         await maximizeButton.click({ force: true });
+        await expect(windowLocator).not.toHaveClass(/workspace__window--maximized/);
         await expect(windowLocator).toHaveCount(1);
 
         // Find duplicate button
