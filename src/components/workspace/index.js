@@ -146,17 +146,7 @@ export function createWorkspace() {
 
   syncMenuDataset();
 
-  utilityMenuTargets.forEach((panelId, utilityId) => {
-    const button = getUtilityButton(utilityId);
 
-    if (!(button instanceof HTMLButtonElement)) {
-      return;
-    }
-
-    button.addEventListener('click', () => {
-      activateMenuPanel(panelId);
-    });
-  });
 
   workspace.addEventListener(WORKSPACE_MENU_CHANGE_EVENT, (event) => {
     const id = typeof event?.detail?.id === 'string' ? event.detail.id : '';
