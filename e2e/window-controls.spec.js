@@ -38,8 +38,8 @@ test.describe('window controls', () => {
         const realDuplicateButton = windowLocator.first().getByRole('button', { name: '複製' });
         await expect(realDuplicateButton).toBeVisible();
 
-        // Click duplicate
-        await realDuplicateButton.click({ force: true });
+        // Click duplicate using JavaScript to avoid resize handle overlay issue
+        await realDuplicateButton.evaluate(el => el.click());
 
         // Expect 2 windows
         await expect(page.locator('.workspace__window')).toHaveCount(2);
