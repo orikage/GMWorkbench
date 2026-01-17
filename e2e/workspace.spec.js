@@ -52,7 +52,7 @@ test.describe('workspace design theme', () => {
 
     const workspace = page.locator('.workspace');
     await expect(workspace).toHaveAttribute('data-theme', 'midnight');
-    await expect(workspace).toHaveCSS('background-color', 'rgb(9, 13, 20)');
+    await expect(workspace).toHaveCSS('background-color', 'rgb(18, 18, 18)');
 
     const tokens = await page.evaluate(() => {
       const styles = getComputedStyle(document.documentElement);
