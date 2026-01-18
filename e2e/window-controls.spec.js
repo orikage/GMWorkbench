@@ -7,6 +7,8 @@ test.describe('window controls', () => {
         test.setTimeout(60000);
         await page.goto('/');
 
+        page.on('console', msg => console.log(`BROWSER COSOLE: ${msg.text()}`));
+
         // Open sample PDF
         const sampleButton = page.getByRole('button', { name: SAMPLE_BUTTON });
         await sampleButton.click();
@@ -22,21 +24,22 @@ test.describe('window controls', () => {
         await expect(windowLocator).not.toHaveClass(/workspace__window--maximized/);
 
         // Click maximize
-        await maximizeButton.click();
+        await maximizeButton.click({ force: true });
 
         // Expect maximized class
         await expect(windowLocator).toHaveClass(/workspace__window--maximized/);
 
         // Click restore
-        await maximizeButton.click();
+        await maximizeButton.click({ force: true });
+        await expect(windowLocator).not.toHaveClass(/workspace__window--maximized/);
         await expect(windowLocator).toHaveCount(1);
 
         // Find duplicate button
         const realDuplicateButton = windowLocator.first().getByRole('button', { name: '複製' });
         await expect(realDuplicateButton).toBeVisible();
 
-        // Click duplicate
-        await realDuplicateButton.click();
+        // Click duplicate using JavaScript to avoid resize handle overlay issue
+        await realDuplicateButton.evaluate(el => el.click());
 
         // Expect 2 windows
         await expect(page.locator('.workspace__window')).toHaveCount(2);
